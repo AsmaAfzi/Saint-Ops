@@ -1,4 +1,4 @@
-name: SAINT-OPS CI Pipeline
+name: SAINT-OPS CI/CD Pipeline
 
 on:
   push:
@@ -7,8 +7,9 @@ on:
     branches: [main]
 
 jobs:
-  lint-and-test:
-    name: Lint & Test Backend
+
+  test:
+    name: Run Tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -22,31 +23,56 @@ jobs:
         run: |
           cd backend
           pip install -r requirements.txt
+          pip install pytest httpx
 
-      - name: Lint with flake8
+      - name: Run pytest
         run: |
-          pip install flake8
-          flake8 backend/backend.py --max-line-length=120 --ignore=E501 || true
+          cd backend
+          pytest tests/test_api.py -v
 
-      - name: Run tests
-        run: |
-          pip install pytest
-          pytest backend/model_test.py -v || echo "⚠️ Tests need implementation - pipeline continues"
-
-  build-docker-images:
-    name: Build Docker Images
+  lint:
+    name: Lint Code
     runs-on: ubuntu-latest
-    needs: lint-and-test
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build Backend Image
-        run: docker build -t saint-backend:latest ./backend
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
 
-      - name: Build Frontend Image
-        run: docker build -t saint-frontend:latest ./frontend
-
-      - name: Verify images exist
+      - name: Run flake8
         run: |
-          docker images | grep saint
-          echo "✅ All SAINT-OPS images built successfully"
+          pip install flake8
+          flake8 backend/backend.py --max-line-length=120 --ignore=E501,W503 || true
+
+  build-and-push:
+    name: Build & Push Docker Images
+    runs-on: ubuntu-latest
+    needs: [test, lint]
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push backend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/saint-backend:latest
+
+      - name: Build and push frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/saint-frontend:latest
+
+      - name: Confirm images pushed
+        run: echo "✅ saint-backend and saint-frontend pushed to Docker Hub"
