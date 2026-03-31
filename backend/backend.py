@@ -14,9 +14,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-ARTIFACTS_DIR = os.path.join(BASE_DIR, "../artifacts")
-DATA_DIR = os.path.join(BASE_DIR, "../data")
+#BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+#ARTIFACTS_DIR = os.path.join(BASE_DIR, "../artifacts")
+#DATA_DIR = os.path.join(BASE_DIR, "../data")
+
+BASE_DIR = "/app"
+DATA_DIR = os.environ.get("DATA_DIR", "/app/data")
+ARTIFACTS_DIR = os.environ.get("ARTIFACTS_DIR", "/app/artifacts")
+MODELS_DIR = os.environ.get("MODELS_DIR", "/app/models")
 
 # Load data
 df = pd.read_excel(os.path.join(DATA_DIR, "synthetic_drift_dataset_v2.xlsx"))
