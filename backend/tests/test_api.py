@@ -1,10 +1,28 @@
 import pytest
 from fastapi.testclient import TestClient
+from unittest.mock import patch
+import numpy as np
+import pandas as pd
 import sys
 import os
 
+# Add backend module to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from backend import app
+
+# ── Mock pandas and numpy data before importing backend ─────────
+dummy_df = pd.DataFrame({
+    "DATEPRD": pd.date_range("2026-01-01", periods=5),
+    "feature1": [0,1,2,3,4],
+    "feature2": [5,6,7,8,9]
+})
+
+dummy_feature_error = np.random.rand(5,2)
+dummy_predicted_drift = np.array([False]*5)
+dummy_drift_type = np.array(["Sensor Drift"]*5)
+
+with patch("backend.pd.read_excel", return_value=dummy_df), \
+     patch("backend.np.load", side_effect=[dummy_feature_error, dummy_predicted_drift, dummy_drift_type]):
+    from backend import app
 
 client = TestClient(app)
 
