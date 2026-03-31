@@ -1,0 +1,54 @@
+version: "3.9"
+
+services:
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: saint-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./artifacts:/app/artifacts
+      - ./models:/app/models
+      - ./data:/app/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - saint-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: saint-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - saint-network
+
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.9.2
+    container_name: saint-mlflow
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./mlflow-data:/mlflow
+    command: >
+      mlflow server
+      --host 0.0.0.0
+      --backend-store-uri sqlite:///mlflow/mlflow.db
+      --default-artifact-root /mlflow/artifacts
+    networks:
+      - saint-network
+
+networks:
+  saint-network:
+    driver: bridge
