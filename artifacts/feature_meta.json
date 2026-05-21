@@ -1,0 +1,26 @@
+{
+  "all_features": [
+    "AVG_DOWNHOLE_PRESSURE",
+    "AVG_DOWNHOLE_TEMPERATURE",
+    "BORE_OIL_VOL",
+    "AVG_WHP_P",
+    "AVG_ANNULUS_PRESS"
+  ],
+  "env_features": [
+    "AVG_DOWNHOLE_PRESSURE",
+    "AVG_DOWNHOLE_TEMPERATURE",
+    "BORE_OIL_VOL",
+    "AVG_WHP_P"
+  ],
+  "sensor_features": [
+    "AVG_ANNULUS_PRESS"
+  ],
+  "env_indices": [
+    0,
+    1,
+    2,
+    3
+  ],
+  "sensor_index": 4,
+  "window_size": 10
+}

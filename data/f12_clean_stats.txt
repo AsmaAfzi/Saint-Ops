@@ -1,0 +1,20 @@
+SAINT F-12 Data Preparation Report
+============================================================
+
+Source file : data\Volve production data.xlsx
+Well        : 15/9-F-12
+Output file : f12_clean.csv
+
+Cleaning steps:
+  Removed 421 shutdown days
+  Removed 1765 gauge-pull days
+  Forward-filled 13 annulus nulls
+  Clipped 18 temperature outliers
+
+Final rows  : 864
+Baseline    : 259 rows
+Normal      : 432 rows
+Drift       : 173 rows
+
+ENV_FEATURES    : ['AVG_DOWNHOLE_PRESSURE', 'AVG_DOWNHOLE_TEMPERATURE', 'BORE_OIL_VOL', 'AVG_WHP_P']
+SENSOR_FEATURES : ['AVG_ANNULUS_PRESS']
