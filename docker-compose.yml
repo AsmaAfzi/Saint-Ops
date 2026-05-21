@@ -4,11 +4,16 @@ services:
 
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: saint-backend
     ports:
       - "8000:8000"
+    environment:
+      DATA_DIR: /app/data
+      ARTIFACTS_DIR: /app/artifacts
+      MODELS_DIR: /app/models
+      STREAM_CSV: /app/data/scenario_C_annulus.csv
     volumes:
       - ./artifacts:/app/artifacts
       - ./models:/app/models
@@ -17,7 +22,8 @@ services:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 30s
       timeout: 10s
-      retries: 3
+      start_period: 120s
+      retries: 5
     networks:
       - saint-network
 

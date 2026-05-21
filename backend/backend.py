@@ -7,12 +7,40 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-# Project root + ml package for shared inference
 BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
-ROOT_DIR = os.path.dirname(BACKEND_DIR)
-ML_DIR = os.path.join(ROOT_DIR, "ml")
-if ML_DIR not in sys.path:
-    sys.path.insert(0, ML_DIR)
+
+
+def _resolve_root_dir() -> str:
+    """
+    Resolve project root for data/artifacts/models paths.
+
+    - Docker: backend.py and volume mounts live under /app
+    - Local dev: backend/ is a subfolder; data/ is next to backend/
+    """
+    if os.path.isdir(os.path.join(BACKEND_DIR, "data")):
+        return BACKEND_DIR
+    parent = os.path.dirname(BACKEND_DIR)
+    if os.path.isdir(os.path.join(parent, "data")):
+        return parent
+    return BACKEND_DIR
+
+
+def _setup_inference_import() -> None:
+    """
+    Import shared inference module from ml/inference.py (local) or /app/inference.py (Docker).
+    """
+    bundled = os.path.join(BACKEND_DIR, "inference.py")
+    if os.path.isfile(bundled):
+        if BACKEND_DIR not in sys.path:
+            sys.path.insert(0, BACKEND_DIR)
+        return
+    ml_dir = os.path.join(_resolve_root_dir(), "ml")
+    if os.path.isfile(os.path.join(ml_dir, "inference.py")) and ml_dir not in sys.path:
+        sys.path.insert(0, ml_dir)
+
+
+ROOT_DIR = _resolve_root_dir()
+_setup_inference_import()
 
 from inference import build_stream_timeline  # noqa: E402
 
