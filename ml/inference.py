@@ -1,5 +1,5 @@
 """
-Shared SAINT inference: LSTM reconstruction + CUSUM + dominance-ratio classification.
+Shared SAINT inference: LSTM reconstruction + rolling p99 CUSUM + dominance-ratio classification (v6).
 Used by test_model.py (evaluation) and backend.py (stream precompute).
 """
 
@@ -14,11 +14,13 @@ import numpy as np
 import pandas as pd
 from tensorflow.keras.models import load_model
 
-# ── Detector / classifier parameters (v5) ─────────────────────────────────────
+# ── Detector / classifier parameters (v6) ─────────────────────────────────────
 
 CUSUM_K = 0.5
 CUSUM_H = 4.0
-ROLL_WINDOW = 7
+ROLL_P99_WINDOW = 50
+MAX_NORMALIZED_ERROR = 5.0
+ROLL_Z_WINDOW = 7
 ROLL_Z_THRESH = 2.0
 PERSIST = 3
 ANNULUS_DOMINANCE_THRESH = 2.0
@@ -55,20 +57,28 @@ def recon_error_per_feature(x_true: np.ndarray, x_pred: np.ndarray) -> np.ndarra
     return np.mean(np.square(x_true - x_pred), axis=1)
 
 
+def rolling_p99_normalize(
+    errors_per_feat: np.ndarray, window: int, cap: float
+) -> tuple[np.ndarray, np.ndarray]:
+    """Normalise errors by rolling p99 per feature; cap at `cap` multiples of p99."""
+    df = pd.DataFrame(errors_per_feat)
+    roll_p99 = (
+        df.rolling(window, min_periods=10).quantile(0.99).fillna(df.quantile(0.99))
+    )
+    roll_p99_safe = roll_p99.clip(lower=1e-8)
+    normalized = (df / roll_p99_safe).clip(upper=cap)
+    return normalized.values, roll_p99.values
+
+
 def compute_cusum(
-    errors_per_feat: np.ndarray, normal_pf: np.ndarray, k: float, h: float
+    normalized_errors: np.ndarray, k: float, h: float
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    mu0 = np.median(normal_pf, axis=0)
-    sigma0 = (
-        np.percentile(normal_pf, 75, axis=0) - np.percentile(normal_pf, 25, axis=0)
-    ) / 1.349 + 1e-8
-    z = (errors_per_feat - mu0) / sigma0
-    n, _ = z.shape
-    s_pos = np.zeros((n, z.shape[1]))
-    s_neg = np.zeros((n, z.shape[1]))
+    n, _ = normalized_errors.shape
+    s_pos = np.zeros((n, normalized_errors.shape[1]))
+    s_neg = np.zeros((n, normalized_errors.shape[1]))
     for i in range(1, n):
-        s_pos[i] = np.maximum(0, s_pos[i - 1] + z[i] - k)
-        s_neg[i] = np.maximum(0, s_neg[i - 1] - z[i] - k)
+        s_pos[i] = np.maximum(0, s_pos[i - 1] + normalized_errors[i] - k)
+        s_neg[i] = np.maximum(0, s_neg[i - 1] - normalized_errors[i] - k)
     flags = (s_pos > h) | (s_neg > h)
     return flags, s_pos, s_neg
 
@@ -103,17 +113,28 @@ def persistence_filter_1d(flags: np.ndarray, persist: int) -> np.ndarray:
 
 def classify_windows(
     errors_per_feat: np.ndarray,
-    normal_pf: np.ndarray,
     all_features: list[str],
     env_idxs: list[int],
     sensor_idx: int,
-) -> tuple[list[str], np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    cusum_raw, s_pos, _ = compute_cusum(errors_per_feat, normal_pf, CUSUM_K, CUSUM_H)
-    roll_raw, roll_z = compute_rolling_z(errors_per_feat, ROLL_WINDOW, ROLL_Z_THRESH)
+) -> tuple[
+    list[str],
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+]:
+    norm_errors, roll_p99 = rolling_p99_normalize(
+        errors_per_feat, ROLL_P99_WINDOW, MAX_NORMALIZED_ERROR
+    )
+    cusum_raw, s_pos, _ = compute_cusum(norm_errors, CUSUM_K, CUSUM_H)
+    roll_raw, roll_z = compute_rolling_z(errors_per_feat, ROLL_Z_WINDOW, ROLL_Z_THRESH)
+
     combined_raw = cusum_raw | roll_raw
     combined_filtered = persistence_filter_2d(combined_raw, PERSIST)
-    any_anomalous = combined_filtered.any(axis=1)
-    any_anomalous = persistence_filter_1d(any_anomalous, PERSIST)
+    any_anomalous = persistence_filter_1d(combined_filtered.any(axis=1), PERSIST)
 
     labels: list[str] = []
     for i in range(errors_per_feat.shape[0]):
@@ -130,21 +151,29 @@ def classify_windows(
             labels.append("Sensor Fault: Annulus Pressure Gauge")
             continue
 
-        leader_local_idx = int(np.argmax(env_s))
-        leader_global_idx = env_idxs[leader_local_idx]
-        leader_s = env_s[leader_local_idx]
-        other_env_s = np.delete(env_s, leader_local_idx)
-        env_ratio = leader_s / (other_env_s.mean() + 1e-8)
+        leader_local = int(np.argmax(env_s))
+        leader_s = env_s[leader_local]
+        others_mean = np.delete(env_s, leader_local).mean() + 1e-8
+        env_ratio = leader_s / others_mean
 
         if env_ratio > ENV_DOMINANCE_THRESH and ann_s < max_env:
-            feat_name = all_features[leader_global_idx]
+            feat_name = all_features[env_idxs[leader_local]]
             display = DISPLAY_NAMES.get(feat_name, feat_name)
             labels.append(f"Probable Sensor Fault: {display}")
             continue
 
         labels.append("Environmental Drift")
 
-    return labels, cusum_raw, roll_raw, combined_filtered, s_pos, roll_z
+    return (
+        labels,
+        cusum_raw,
+        roll_raw,
+        combined_filtered,
+        s_pos,
+        roll_z,
+        norm_errors,
+        roll_p99,
+    )
 
 
 def load_artifacts(artifacts_dir: str, models_dir: str) -> dict[str, Any]:
@@ -192,9 +221,8 @@ def build_stream_timeline(
     x_pred = bundle["model"].predict(x_seq, verbose=0)
     errors_per_feat = recon_error_per_feature(x_seq, x_pred)
 
-    fine_labels, _, _, _, _, _ = classify_windows(
+    fine_labels, _, _, _, _, _, _, _ = classify_windows(
         errors_per_feat=errors_per_feat,
-        normal_pf=bundle["normal_pf"],
         all_features=all_features,
         env_idxs=env_idxs,
         sensor_idx=sensor_idx,
@@ -231,4 +259,5 @@ def build_stream_timeline(
         "global_threshold": bundle["global_threshold"],
         "window_size": window_size,
         "source": data_path,
+        "classifier_version": "v6_rolling_p99",
     }

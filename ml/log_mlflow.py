@@ -26,7 +26,7 @@ MODEL_PATH = os.path.join(MODELS_DIR, "lstm_autoencoder.keras")
 
 TRACKING_URI = os.environ.get("MLFLOW_TRACKING_URI", "http://127.0.0.1:5000")
 EXPERIMENT_NAME = "SAINT-OPS"
-RUN_NAME = "lstm_ae_v5_scenario_eval"
+RUN_NAME = "lstm_ae_v6_rolling_p99"
 
 
 def parse_report(path: str) -> dict[str, float]:
@@ -81,7 +81,9 @@ def main() -> None:
                 "model_type": "LSTM_Autoencoder",
                 "window_size": 10,
                 "n_features": 5,
-                "classifier": "CUSUM_dominance_ratio_v5",
+                "classifier": "rolling_p99_CUSUM_v6",
+                "roll_p99_window": 50,
+                "max_normalized_error": 5.0,
                 "stream_demo": "scenario_C_annulus_drift",
             }
         )

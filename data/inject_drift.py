@@ -80,11 +80,10 @@ SCENARIOS = {
         "description": "Only annulus pressure drifts — micro-annulus leak",
         "label": "Sensor Drift",
         "injections": {
-            # +12 bar over 173 days = 0.069 bar/day.
-            # Industry reference for micro-annulus: 0.05-0.15 bar/day ✓
-            # SNR = 5.5x noise floor.
-            # All 4 env features untouched.
-            "AVG_ANNULUS_PRESS":        {"magnitude": +12.0,   "noise_scale": 0.8},
+            # +25 bar over drift window ≈ 0.14 bar/day (active micro-annulus leak range).
+            # v5 +12 bar was below normal-window p99 reconstruction error — invisible to model.
+            # SNR remains strong vs noise floor. All 4 env features untouched.
+            "AVG_ANNULUS_PRESS":        {"magnitude": +25.0,   "noise_scale": 0.8},
         },
     },
 }
