@@ -2,12 +2,12 @@ import React, { useState, useEffect } from "react";
 import Plot from "react-plotly.js";
 import axios from "axios";
 
-const START_IDX = 800;
+const START_IDX = 10;
 const TOP_K = 3;
 
-// Feature filters based on drift type
+// Feature filters based on drift type (5-feature LSTM model)
 const ENV_FEATURES = ["AVG_DOWNHOLE_PRESSURE", "AVG_DOWNHOLE_TEMPERATURE", "BORE_OIL_VOL", "AVG_WHP_P"];
-const SENSOR_FEATURES = ["DP_CHOKE_SIZE", "AVG_DOWNHOLE_PRESSURE"];
+const SENSOR_FEATURES = ["AVG_ANNULUS_PRESS"];
 
 function App() {
   const [t, setT] = useState(START_IDX);

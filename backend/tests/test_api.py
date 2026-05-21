@@ -1,56 +1,68 @@
-import pytest
+import os
+import sys
+
 import numpy as np
 import pandas as pd
-from unittest.mock import patch, MagicMock
-import sys
-import os
+from fastapi.testclient import TestClient
 
-# Add backend module to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# ── Mock all heavy files BEFORE importing backend ────────
+import backend as backend_module
+
+N = 100
 dummy_df = pd.DataFrame({
-    "DATEPRD": pd.date_range("2020-01-01", periods=100),
-    "AVG_DOWNHOLE_PRESSURE": np.random.rand(100),
-    "AVG_DOWNHOLE_TEMPERATURE": np.random.rand(100),
-    "BORE_OIL_VOL": np.random.rand(100),
-    "AVG_WHP_P": np.random.rand(100),
-    "DP_CHOKE_SIZE": np.random.rand(100),
-    "window": ["baseline"] * 30 + ["normal"] * 50 + ["drift"] * 20
+    "DATEPRD": pd.date_range("2020-01-01", periods=N),
 })
 
-dummy_array = np.zeros(100)
-dummy_2d = np.zeros((100, 5))
+backend_module._stream = {
+    "df": dummy_df,
+    "feature_error": np.random.rand(N, 5).astype(np.float64),
+    "predicted_drift": np.array([False] * 20 + [True] * 80),
+    "drift_type": np.array(["No Drift"] * 20 + ["Sensor Drift"] * 80, dtype=object),
+    "drift_type_fine": np.array(["No Drift"] * 20 + ["Sensor Fault: Annulus Pressure Gauge"] * 80, dtype=object),
+    "feature_names": [
+        "AVG_DOWNHOLE_PRESSURE",
+        "AVG_DOWNHOLE_TEMPERATURE",
+        "BORE_OIL_VOL",
+        "AVG_WHP_P",
+        "AVG_ANNULUS_PRESS",
+    ],
+    "env_idxs": [0, 1, 2, 3],
+    "sensor_idx": 4,
+    "sensor_threshold": 0.05,
+    "env_thresholds": np.array([0.01, 0.01, 0.01, 0.01]),
+    "global_threshold": 0.1,
+    "window_size": 10,
+    "source": "mock",
+}
 
-with patch("pandas.read_excel", return_value=dummy_df), \
-     patch("numpy.load", return_value=dummy_array), \
-     patch("joblib.load", return_value=MagicMock()), \
-     patch("tensorflow.keras.models.load_model", return_value=MagicMock()):
-    from backend import app
+from backend import app  # noqa: E402
 
-from fastapi.testclient import TestClient
 client = TestClient(app)
 
-# ── Test 1: Health endpoint ──────────────────────────────
+
 def test_health():
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
 
-# ── Test 2: Ready endpoint ───────────────────────────────
+
 def test_ready():
     response = client.get("/ready")
     assert response.status_code == 200
+    assert response.json()["status"] == "ready"
 
-# ── Test 3: Drift data returns valid structure ────────────
+
 def test_drift_data_structure():
-    response = client.get("/drift_data?t=0")
+    response = client.get("/drift_data?t=25")
     assert response.status_code == 200
     data = response.json()
-    assert "time" in data or "done" in data
+    assert "time" in data
+    assert data["feature_names"] == backend_module._stream["feature_names"]
+    assert len(data["feature_error"]) == 5
 
-# ── Test 4: Out of bounds returns done ───────────────────
+
 def test_drift_data_out_of_bounds():
     response = client.get("/drift_data?t=999999")
     assert response.status_code == 200
-    assert response.json()["done"] == True
+    assert response.json()["done"] is True
