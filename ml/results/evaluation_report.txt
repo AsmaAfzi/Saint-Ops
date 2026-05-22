@@ -1,0 +1,94 @@
+SAINT Evaluation Report (v7)
+============================================================
+
+KNOWN LIMITATION:
+Scenario B (single env sensor fault) is ambiguous vs full env drift
+due to autoencoder bleed-through between correlated features.
+Conservative default: Environmental Drift.
+Windows where one feature dominates CUSUM by > 2.5x are labelled
+'Probable Sensor Fault: X' with inherent uncertainty.
+
+
+============================================================
+Scenario A_env_full: c:\Users\asmaa\Starred\Mini Proj\data/scenario_A_env_full.csv
+============================================================
+                     precision    recall  f1-score   support
+
+           No Drift       1.00      0.64      0.78        22
+Environmental Drift       0.95      1.00      0.97       142
+       Sensor Drift       0.00      0.00      0.00         0
+
+           accuracy                           0.95       164
+          macro avg       0.65      0.55      0.58       164
+       weighted avg       0.95      0.95      0.95       164
+
+Confusion matrix ['No Drift', 'Environmental Drift', 'Sensor Drift']
+[[ 14   8   0]
+ [  0 142   0]
+ [  0   0   0]]
+
+Macro F1 (coarse): 0.5835
+
+Fine-grained breakdown:
+Environmental Drift    150
+No Drift                14
+
+============================================================
+Scenario B_env_single: c:\Users\asmaa\Starred\Mini Proj\data/scenario_B_env_single.csv
+============================================================
+                     precision    recall  f1-score   support
+
+           No Drift       1.00      0.33      0.50        60
+Environmental Drift       0.00      0.00      0.00         0
+       Sensor Drift       0.00      0.00      0.00       104
+
+           accuracy                           0.12       164
+          macro avg       0.33      0.11      0.17       164
+       weighted avg       0.37      0.12      0.18       164
+
+Confusion matrix ['No Drift', 'Environmental Drift', 'Sensor Drift']
+[[ 20  40   0]
+ [  0   0   0]
+ [  0 104   0]]
+
+Macro F1 (coarse): 0.1667
+
+Fine-grained breakdown:
+Environmental Drift    144
+No Drift                20
+
+============================================================
+Scenario C_annulus: c:\Users\asmaa\Starred\Mini Proj\data/scenario_C_annulus.csv
+============================================================
+                     precision    recall  f1-score   support
+
+           No Drift       1.00      0.16      0.28       104
+Environmental Drift       0.00      0.00      0.00         0
+       Sensor Drift       0.00      0.00      0.00        60
+
+           accuracy                           0.10       164
+          macro avg       0.33      0.05      0.09       164
+       weighted avg       0.63      0.10      0.18       164
+
+Confusion matrix ['No Drift', 'Environmental Drift', 'Sensor Drift']
+[[17 87  0]
+ [ 0  0  0]
+ [ 0 60  0]]
+
+Macro F1 (coarse): 0.0937
+
+Fine-grained breakdown:
+Environmental Drift    147
+No Drift                17
+
+============================================================
+OVERALL
+============================================================
+Overall coarse accuracy : 0.3923
+False alarm rate        : 72.6%
+Detection rate          : 100.0%
+
+Fine-grained distribution:
+PREDICTED_LABEL_FINE
+Environmental Drift    441
+No Drift                51
