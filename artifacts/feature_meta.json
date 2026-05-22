@@ -22,5 +22,7 @@
     3
   ],
   "sensor_index": 4,
-  "window_size": 10
+  "window_size": 10,
+  "training_version": "v2_non_drift_val_thresholds",
+  "classifier_version": "v7_rolling_p99"
 }
