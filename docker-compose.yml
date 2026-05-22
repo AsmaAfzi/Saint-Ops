@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
 
   backend:
@@ -39,6 +37,26 @@ services:
         condition: service_healthy
     networks:
       - saint-network
+
+  # Optional: train in Linux container if TensorFlow fails on Windows host
+  #   docker compose run --rm train
+  train:
+    build:
+      context: .
+      dockerfile: ml/Dockerfile
+    volumes:
+      - ./data:/app/data
+      - ./models:/app/models
+      - ./artifacts:/app/artifacts
+      - ./ml:/app/ml
+    environment:
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+    depends_on:
+      - mlflow
+    networks:
+      - saint-network
+    profiles:
+      - train
 
   mlflow:
     image: ghcr.io/mlflow/mlflow:v2.9.2

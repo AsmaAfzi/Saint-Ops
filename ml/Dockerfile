@@ -1,13 +1,12 @@
+# Build from repo root: docker compose --profile train build train
 FROM python:3.11-slim
 
 WORKDIR /app
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY ml/requirements.txt ml/requirements.txt
+RUN pip install --no-cache-dir -r ml/requirements.txt
 
-COPY train_model.py .
+COPY ml/train_model.py ml/train_model.py
+COPY ml/mlflow_log.py ml/mlflow_log.py
 
-# Volumes for data and output artifacts
-VOLUME ["/app/data", "/app/models", "/app/artifacts"]
-
-CMD ["python", "train_model.py"]
+CMD ["python", "ml/train_model.py"]

@@ -1,16 +1,16 @@
 """
 Automatic MLflow logging for SAINT-OPS training and evaluation.
 
-Called from train_model.py and test_model.py. Fails gracefully if the server
-is unreachable (training/eval still complete).
+Uses log_artifact only (compatible with MLflow 2.9.x server + client).
+Avoids mlflow.keras.log_model / logged-models API (404 on server 2.9.2).
 
 Environment:
-  MLFLOW_TRACKING_URI   default http://127.0.0.1:5000
+  MLFLOW_TRACKING_URI    default http://127.0.0.1:5000
   MLFLOW_EXPERIMENT_NAME default SAINT-OPS
-  MLFLOW_DISABLED=1     skip all logging
+  MLFLOW_DISABLED=1      skip all logging
 
-Manual full snapshot (after train + eval):
-  python log_mlflow.py
+Install matching client: pip install mlflow==2.9.2  (see ml/requirements.txt)
+Start server: docker compose up mlflow -d
 """
 
 from __future__ import annotations
@@ -18,10 +18,11 @@ from __future__ import annotations
 import json
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 RUN_META_FILE = "mlflow_run.json"
+MLFLOW_VERSION = "2.9.2"
 
 
 def _enabled() -> bool:
@@ -44,7 +45,11 @@ def save_run_meta(artifacts_dir: str, run_id: str, run_name: str) -> None:
     path = _run_meta_path(artifacts_dir)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(
-            {"run_id": run_id, "run_name": run_name, "updated_at": datetime.utcnow().isoformat()},
+            {
+                "run_id": run_id,
+                "run_name": run_name,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            },
             f,
             indent=2,
         )
@@ -91,6 +96,20 @@ def parse_evaluation_report(path: str) -> dict[str, float]:
     return metrics
 
 
+def _warn_if_client_version_mismatch() -> None:
+    try:
+        import mlflow
+
+        client_ver = mlflow.__version__
+        if not client_ver.startswith("2.9."):
+            print(
+                f"[MLflow] Warning: client {client_ver} may not match server {MLFLOW_VERSION}. "
+                f"Run: pip install mlflow=={MLFLOW_VERSION}"
+            )
+    except ImportError:
+        pass
+
+
 def _log_artifact_files(artifacts_dir: str, models_dir: str) -> None:
     import mlflow
 
@@ -105,6 +124,7 @@ def _log_artifact_files(artifacts_dir: str, models_dir: str) -> None:
         "env_thresholds.npy",
         "sensor_threshold.npy",
         "normal_errors_per_feature.npy",
+        "normal_errors.npy",
     ]:
         path = os.path.join(artifacts_dir, rel)
         if os.path.isfile(path):
@@ -114,22 +134,25 @@ def _log_artifact_files(artifacts_dir: str, models_dir: str) -> None:
 def log_training_run(
     artifacts_dir: str,
     models_dir: str,
-    model: Any,
+    model: Any,  # kept for API compatibility; model logged via .keras file on disk
     params: dict[str, Any],
     metrics: dict[str, float],
 ) -> str | None:
     """
     Start a new MLflow run after training. Saves run_id for evaluation to extend.
     """
+    del model  # logged as artifact from models_dir, not via log_model API
+
     if not _enabled():
         return None
 
     try:
         import mlflow
-        import mlflow.keras
     except ImportError:
-        print("[MLflow] mlflow not installed — pip install mlflow")
+        print("[MLflow] mlflow not installed — pip install mlflow==2.9.2")
         return None
+
+    _warn_if_client_version_mismatch()
 
     try:
         mlflow.set_tracking_uri(tracking_uri())
@@ -139,27 +162,22 @@ def log_training_run(
         with mlflow.start_run(run_name=run_name) as run:
             mlflow.log_params(params)
             mlflow.log_metrics(metrics)
+            mlflow.set_tag("stage", "training")
+            mlflow.set_tag("model_file", "lstm_autoencoder.keras")
             _log_artifact_files(artifacts_dir, models_dir)
-
-            try:
-                mlflow.keras.log_model(
-                    model,
-                    artifact_path="lstm_autoencoder",
-                    registered_model_name="SAINT_LSTM_AE",
-                )
-            except Exception:
-                mlflow.keras.log_model(model, artifact_path="lstm_autoencoder")
 
             save_run_meta(artifacts_dir, run.info.run_id, run_name)
             print(
                 f"[MLflow] Training logged — run '{run_name}' "
-                f"→ {tracking_uri()} (experiment: {experiment_name()})"
+                f"(id {run.info.run_id[:8]}…) → {tracking_uri()}"
             )
+            print(f"         UI: {tracking_uri()}/#/experiments")
             return run.info.run_id
 
     except Exception as exc:
-        print(f"[MLflow] Training log skipped (server unreachable?): {exc}")
-        print(f"         Start server: docker compose up mlflow -d")
+        print(f"[MLflow] Training log failed: {exc}")
+        print(f"         Ensure server is up: docker compose up mlflow -d")
+        print(f"         Client version: pip install mlflow=={MLFLOW_VERSION}")
         return None
 
 
@@ -178,8 +196,10 @@ def log_evaluation_run(
     try:
         import mlflow
     except ImportError:
-        print("[MLflow] mlflow not installed — pip install mlflow")
+        print("[MLflow] mlflow not installed — pip install mlflow==2.9.2")
         return
+
+    _warn_if_client_version_mismatch()
 
     report_path = os.path.join(results_dir, "evaluation_report.txt")
     pred_path = os.path.join(results_dir, "predictions_all.csv")
@@ -194,32 +214,35 @@ def log_evaluation_run(
         mlflow.set_tracking_uri(tracking_uri())
         mlflow.set_experiment(experiment_name())
 
-        ctx = (
-            mlflow.start_run(run_id=run_id)
-            if run_id
-            else mlflow.start_run(
-                run_name=f"saint_eval_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-            )
-        )
+        if run_id:
+            with mlflow.start_run(run_id=run_id):
+                mlflow.set_tag("stage", "evaluation")
+                if metrics:
+                    mlflow.log_metrics(metrics)
+                if os.path.isfile(report_path):
+                    mlflow.log_artifact(report_path, artifact_path="reports")
+                if os.path.isfile(pred_path):
+                    mlflow.log_artifact(pred_path, artifact_path="reports")
+                _log_artifact_files(artifacts_dir, models_dir)
+            target = run_id
+        else:
+            run_name = f"saint_eval_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            with mlflow.start_run(run_name=run_name):
+                mlflow.set_tag("stage", "evaluation")
+                if metrics:
+                    mlflow.log_metrics(metrics)
+                if os.path.isfile(report_path):
+                    mlflow.log_artifact(report_path, artifact_path="reports")
+                if os.path.isfile(pred_path):
+                    mlflow.log_artifact(pred_path, artifact_path="reports")
+                _log_artifact_files(artifacts_dir, models_dir)
+            target = run_name
 
-        with ctx:
-            mlflow.set_tag("stage", "evaluation")
-            if metrics:
-                mlflow.log_metrics(metrics)
-
-            if os.path.isfile(report_path):
-                mlflow.log_artifact(report_path, artifact_path="reports")
-            if os.path.isfile(pred_path):
-                mlflow.log_artifact(pred_path, artifact_path="reports")
-
-            _log_artifact_files(artifacts_dir, models_dir)
-
-        target = run_id or "new run"
         print(f"[MLflow] Evaluation logged to run {target} → {tracking_uri()}")
 
     except Exception as exc:
-        print(f"[MLflow] Evaluation log skipped: {exc}")
-        print(f"         Start server: docker compose up mlflow -d")
+        print(f"[MLflow] Evaluation log failed: {exc}")
+        print(f"         Ensure server is up: docker compose up mlflow -d")
 
 
 def log_full_snapshot(artifacts_dir: str, models_dir: str, results_dir: str) -> None:
@@ -230,8 +253,10 @@ def log_full_snapshot(artifacts_dir: str, models_dir: str, results_dir: str) -> 
     try:
         import mlflow
     except ImportError:
-        print("[MLflow] mlflow not installed — pip install mlflow")
+        print("[MLflow] mlflow not installed — pip install mlflow==2.9.2")
         return
+
+    _warn_if_client_version_mismatch()
 
     report_path = os.path.join(results_dir, "evaluation_report.txt")
     metrics = parse_evaluation_report(report_path)
