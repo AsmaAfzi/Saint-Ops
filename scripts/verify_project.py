@@ -23,6 +23,7 @@ REQUIRED = [
     "artifacts/normal_errors_per_feature.npy",
     "models/lstm_autoencoder.keras",
     "ml/inference.py",
+    "ml/mlflow_log.py",
     "backend/backend.py",
 ]
 

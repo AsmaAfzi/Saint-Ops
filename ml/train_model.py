@@ -331,5 +331,39 @@ else:
 
 print(f"\n{'='*60}")
 print(f"Training complete.")
-print(f"Next step: python evaluate_saint.py")
+print(f"Next step: python test_model.py")
 print(f"{'='*60}")
+
+# ── STEP 9: MLFLOW (automatic) ────────────────────────────────────────────────
+try:
+    from mlflow_log import log_training_run
+
+    log_training_run(
+        artifacts_dir=ARTIFACT_DIR,
+        models_dir=MODEL_DIR,
+        model=model,
+        params={
+            "training_version": "v2_non_drift_val_thresholds",
+            "classifier": "rolling_p99_CUSUM_v7",
+            "window_size": WINDOW_SIZE,
+            "n_features": len(ALL_FEATURES),
+            "lstm_units": LSTM_UNITS,
+            "latent_dim": LATENT_DIM,
+            "dropout": DROPOUT,
+            "val_split_frac": VAL_SPLIT_FRAC,
+            "threshold_percentile": THRESHOLD_PERCENTILE,
+            "fit_rows": n_fit,
+            "val_rows": n_val,
+        },
+        metrics={
+            "train_loss_final": float(history.history["loss"][-1]),
+            "val_loss_final": float(history.history["val_loss"][-1]),
+            "global_threshold": float(global_threshold),
+            "sensor_threshold": float(sensor_threshold),
+            "pct_fit_above_threshold": float(pct_fit_above),
+            "pct_val_above_threshold": float(pct_val_above),
+            "epochs_trained": float(stopped),
+        },
+    )
+except Exception as _mlflow_exc:
+    print(f"[MLflow] { _mlflow_exc}")

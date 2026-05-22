@@ -453,3 +453,20 @@ print(f"\n[4] Results saved to '{RESULTS_DIR}/'")
 print(f"{'='*60}")
 print("Evaluation complete.")
 print(f"{'='*60}")
+
+# ── STEP 5: MLFLOW (automatic) ────────────────────────────────────────────────
+try:
+    from mlflow_log import log_evaluation_run
+
+    log_evaluation_run(
+        artifacts_dir=os.path.join(ROOT_DIR, "artifacts"),
+        models_dir=os.path.join(ROOT_DIR, "models"),
+        results_dir=RESULTS_DIR,
+        metrics={
+            "overall_coarse_accuracy": float(overall_acc),
+            "false_alarm_rate": float(fa_r),
+            "detection_rate": float(det_r),
+        },
+    )
+except Exception as _mlflow_exc:
+    print(f"[MLflow] {_mlflow_exc}")
