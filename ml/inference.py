@@ -1,5 +1,5 @@
 """
-Shared SAINT inference: LSTM reconstruction + rolling p99 CUSUM + dominance-ratio classification (v6).
+Shared SAINT inference: LSTM reconstruction + rolling p99 CUSUM + dominance-ratio classification (v7).
 Used by test_model.py (evaluation) and backend.py (stream precompute).
 """
 
@@ -259,5 +259,5 @@ def build_stream_timeline(
         "global_threshold": bundle["global_threshold"],
         "window_size": window_size,
         "source": data_path,
-        "classifier_version": "v6_rolling_p99",
+        "classifier_version": "v7_rolling_p99",
     }
