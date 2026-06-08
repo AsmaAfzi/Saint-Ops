@@ -113,6 +113,37 @@ Then open:
 | 🏥 Health Check | http://localhost:8000/health |
 | 📊 MLflow Model Registry | http://localhost:5000 |
 
+### Model lifecycle (Phase 3)
+
+1. **Train** → new version auto-promoted to **Staging**:
+   ```bash
+   docker compose --profile train run --rm train python ml/train_model.py
+   docker compose --profile train run --rm train python ml/test_model.py
+   ```
+2. **Compare** Staging vs Production:
+   ```bash
+   curl http://localhost:8000/models/compare
+   # or: docker compose --profile train run --rm train python ml/promote_model.py compare
+   ```
+3. **Approve** (optional, when `MLFLOW_REQUIRE_APPROVAL=1`):
+   ```bash
+   curl -X POST http://localhost:8000/models/approve
+   ```
+4. **Promote** Staging → Production (gated on metrics):
+   ```bash
+   curl -X POST http://localhost:8000/models/promote -H "Content-Type: application/json" -d "{}"
+   curl -X POST http://localhost:8000/models/reload
+   ```
+5. **Rollback** one command:
+   ```bash
+   curl -X POST http://localhost:8000/models/rollback
+   curl -X POST http://localhost:8000/models/reload
+   ```
+
+**Shadow / canary:** set `MLFLOW_SHADOW_TRAFFIC_PCT=25` to serve 25% of `/drift_data` from `models:/SAINT/Staging`, or use `?variant=shadow` for explicit shadow responses. Compare at a timestep: `GET /models/shadow/compare?t=50`.
+
+**S3 artifacts:** copy `.env.example` → `.env`, set `MLFLOW_ARTIFACT_ROOT=s3://...`, optionally `docker compose --profile s3 up -d minio`.
+
 ---
 
 ## 🤖 ML Model Performance (Mini Project Baseline)
@@ -162,7 +193,7 @@ Docker images are publicly available:
 |-------|--------|-------------|
 | Phase 1 — Containerization | ✅ Complete | Docker + Docker Compose for all 3 services |
 | Phase 2 — CI/CD | ✅ Complete | GitHub Actions: test → lint → build → push to Docker Hub |
-| Phase 3 — MLflow Registry | 🔄 In Progress | Model versioning, experiment tracking |
+| Phase 3 — MLflow Registry | ✅ Complete | Staging→Production lifecycle, comparison gates, S3 artifacts, shadow serving, rollback API |
 | Phase 4 — Kubernetes | ⏳ Planned | Helm charts, HPA autoscaling, self-healing |
 | Phase 5 — Monitoring | ⏳ Planned | Prometheus + Grafana dashboards |
 | Phase 6 — Auto-retraining | ⏳ Planned | Drift-triggered Airflow DAG |

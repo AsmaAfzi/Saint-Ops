@@ -13,6 +13,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Application code — single source of truth for inference stays in ml/
 COPY backend/backend.py .
 COPY ml/inference.py .
+COPY ml/registry.py .
 
 RUN chown -R appuser:appuser /app
 USER appuser

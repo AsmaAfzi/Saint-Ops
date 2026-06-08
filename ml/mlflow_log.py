@@ -1,16 +1,16 @@
 """
-Automatic MLflow logging for SAINT-OPS training and evaluation.
+Automatic MLflow logging + model registry for SAINT-OPS.
 
-Uses log_artifact only (compatible with MLflow 2.9.x server + client).
-Avoids mlflow.keras.log_model / logged-models API (404 on server 2.9.2).
+Called from train_model.py and test_model.py. Graceful fallback if server is down.
 
 Environment:
-  MLFLOW_TRACKING_URI    default http://127.0.0.1:5000
-  MLFLOW_EXPERIMENT_NAME default SAINT-OPS
-  MLFLOW_DISABLED=1      skip all logging
-
-Install matching client: pip install mlflow==2.9.2  (see ml/requirements.txt)
-Start server: docker compose up mlflow -d
+  MLFLOW_TRACKING_URI       http://127.0.0.1:5000 (host) / http://mlflow:5000 (Docker)
+  MLFLOW_EXPERIMENT_NAME    default SAINT-Drift-Detection
+  MLFLOW_REGISTERED_MODEL   default SAINT
+  MLFLOW_AUTO_STAGE         1 = promote new version to Staging after train (default)
+  MLFLOW_AUTO_PROMOTE       1 = skip Staging and go straight to Production (legacy)
+  MLFLOW_REQUIRE_APPROVAL   1 = require approved=true tag before Staging→Production
+  MLFLOW_DISABLED=1         skip all logging
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 RUN_META_FILE = "mlflow_run.json"
-MLFLOW_VERSION = "2.9.2"
+MLFLOW_VERSION = "2.17.0"
 
 
 def _enabled() -> bool:
@@ -34,28 +34,48 @@ def tracking_uri() -> str:
 
 
 def experiment_name() -> str:
-    return os.environ.get("MLFLOW_EXPERIMENT_NAME", "SAINT-OPS")
+    return os.environ.get("MLFLOW_EXPERIMENT_NAME", "SAINT-Drift-Detection")
+
+
+def registered_model_name() -> str:
+    return os.environ.get("MLFLOW_REGISTERED_MODEL", "SAINT")
+
+
+def _auto_stage() -> bool:
+    return os.environ.get("MLFLOW_AUTO_STAGE", "1").lower() not in ("0", "false", "no")
+
+
+def _auto_promote() -> bool:
+    return os.environ.get("MLFLOW_AUTO_PROMOTE", "0").lower() not in ("0", "false", "no")
 
 
 def _run_meta_path(artifacts_dir: str) -> str:
     return os.path.join(artifacts_dir, RUN_META_FILE)
 
 
-def save_run_meta(artifacts_dir: str, run_id: str, run_name: str) -> None:
+def save_run_meta(
+    artifacts_dir: str,
+    run_id: str,
+    run_name: str,
+    model_version: int | None = None,
+    stage: str | None = None,
+) -> None:
     path = _run_meta_path(artifacts_dir)
+    payload: dict[str, Any] = {
+        "run_id": run_id,
+        "run_name": run_name,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "registered_model": registered_model_name(),
+    }
+    if model_version is not None:
+        payload["model_version"] = model_version
+    if stage is not None:
+        payload["stage"] = stage
     with open(path, "w", encoding="utf-8") as f:
-        json.dump(
-            {
-                "run_id": run_id,
-                "run_name": run_name,
-                "updated_at": datetime.now(timezone.utc).isoformat(),
-            },
-            f,
-            indent=2,
-        )
+        json.dump(payload, f, indent=2)
 
 
-def load_run_meta(artifacts_dir: str) -> dict[str, str] | None:
+def load_run_meta(artifacts_dir: str) -> dict[str, Any] | None:
     path = _run_meta_path(artifacts_dir)
     if not os.path.isfile(path):
         return None
@@ -64,7 +84,6 @@ def load_run_meta(artifacts_dir: str) -> dict[str, str] | None:
 
 
 def parse_evaluation_report(path: str) -> dict[str, float]:
-    """Parse metrics from evaluation_report.txt."""
     metrics: dict[str, float] = {}
     if not os.path.isfile(path):
         return metrics
@@ -100,10 +119,9 @@ def _warn_if_client_version_mismatch() -> None:
     try:
         import mlflow
 
-        client_ver = mlflow.__version__
-        if not client_ver.startswith("2.9."):
+        if not mlflow.__version__.startswith("2.17."):
             print(
-                f"[MLflow] Warning: client {client_ver} may not match server {MLFLOW_VERSION}. "
+                f"[MLflow] Warning: client {mlflow.__version__} may not match server {MLFLOW_VERSION}. "
                 f"Run: pip install mlflow=={MLFLOW_VERSION}"
             )
     except ImportError:
@@ -131,25 +149,77 @@ def _log_artifact_files(artifacts_dir: str, models_dir: str) -> None:
             mlflow.log_artifact(path, artifact_path="artifacts")
 
 
+def _register_keras_model(model: Any) -> bool:
+    """Register model in MLflow Model Registry (MLflow 2.9.x)."""
+    import mlflow.keras
+
+    try:
+        mlflow.keras.log_model(
+            model,
+            artifact_path="saint-lstm-model",
+            registered_model_name=registered_model_name(),
+        )
+        print(f"[MLflow] Registered model '{registered_model_name()}' in Model Registry")
+        return True
+    except Exception as exc:
+        print(f"[MLflow] Registry log_model skipped ({exc}); .keras file still in Artifacts")
+        return False
+
+
+def promote_model_to_staging(model_name: str | None = None) -> int | None:
+    """Promote the latest registered version to Staging (await comparison + approval)."""
+    if not _enabled():
+        return None
+    try:
+        from registry import promote_to_staging
+
+        version = promote_to_staging()
+        if version is not None:
+            name = model_name or registered_model_name()
+            print(f"[MLflow] Model '{name}' version {version} → Staging")
+        return version
+    except Exception as exc:
+        print(f"[MLflow] Promote to Staging failed: {exc}")
+        return None
+
+
+def promote_model_to_production(model_name: str | None = None) -> int | None:
+    """Legacy: promote latest version directly to Production (skips gate)."""
+    if not _enabled():
+        return None
+
+    name = model_name or registered_model_name()
+
+    try:
+        from registry import _resolve_version_number, transition_stage
+
+        version = _resolve_version_number(None)
+        if version is None:
+            print(f"[MLflow] No registered versions for '{name}' to promote")
+            return None
+        transition_stage(int(version), "Production", archive_existing=True)
+        print(f"[MLflow] Model '{name}' version {version} → Production (direct)")
+        return int(version)
+
+    except Exception as exc:
+        print(f"[MLflow] Promote to Production failed: {exc}")
+        return None
+
+
 def log_training_run(
     artifacts_dir: str,
     models_dir: str,
-    model: Any,  # kept for API compatibility; model logged via .keras file on disk
+    model: Any,
     params: dict[str, Any],
     metrics: dict[str, float],
 ) -> str | None:
-    """
-    Start a new MLflow run after training. Saves run_id for evaluation to extend.
-    """
-    del model  # logged as artifact from models_dir, not via log_model API
-
     if not _enabled():
         return None
 
     try:
         import mlflow
     except ImportError:
-        print("[MLflow] mlflow not installed — pip install mlflow==2.9.2")
+        print("[MLflow] mlflow not installed — pip install mlflow==2.17.0")
         return None
 
     _warn_if_client_version_mismatch()
@@ -157,27 +227,61 @@ def log_training_run(
     try:
         mlflow.set_tracking_uri(tracking_uri())
         mlflow.set_experiment(experiment_name())
-        run_name = f"saint_train_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        run_name = f"LSTM-Autoencoder-{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
         with mlflow.start_run(run_name=run_name) as run:
             mlflow.log_params(params)
             mlflow.log_metrics(metrics)
             mlflow.set_tag("stage", "training")
-            mlflow.set_tag("model_file", "lstm_autoencoder.keras")
             _log_artifact_files(artifacts_dir, models_dir)
+            registered = _register_keras_model(model)
+            from mlflow.tracking import MlflowClient
 
-            save_run_meta(artifacts_dir, run.info.run_id, run_name)
-            print(
-                f"[MLflow] Training logged — run '{run_name}' "
-                f"(id {run.info.run_id[:8]}…) → {tracking_uri()}"
+            artifact_roots = [a.path for a in MlflowClient(tracking_uri()).list_artifacts(run.info.run_id)]
+            if not artifact_roots:
+                print(
+                    "[MLflow] Warning: no artifacts on run after upload. "
+                    "Ensure MLflow server uses --serve-artifacts and the train "
+                    "container mounts ./mlflow-data:/mlflow."
+                )
+            else:
+                print(f"[MLflow] Artifacts logged: {', '.join(artifact_roots)}")
+                # Shared volume files are root-owned; world-read so backend can load locally if mounted.
+                root = os.path.join("/mlflow", "artifacts")
+                if os.path.isdir(root):
+                    for dirpath, _, filenames in os.walk(root):
+                        try:
+                            os.chmod(dirpath, 0o755)
+                        except OSError:
+                            pass
+                        for fn in filenames:
+                            try:
+                                os.chmod(os.path.join(dirpath, fn), 0o644)
+                            except OSError:
+                                pass
+
+            model_version = None
+            if _auto_promote():
+                model_version = promote_model_to_production()
+            elif _auto_stage():
+                model_version = promote_model_to_staging()
+
+            save_run_meta(
+                artifacts_dir,
+                run.info.run_id,
+                run_name,
+                model_version,
+                stage="Staging" if model_version and not _auto_promote() else "Production",
             )
-            print(f"         UI: {tracking_uri()}/#/experiments")
+            print(
+                f"[MLflow] Training logged — experiment '{experiment_name()}', "
+                f"run '{run_name}' → {tracking_uri()}"
+            )
             return run.info.run_id
 
     except Exception as exc:
         print(f"[MLflow] Training log failed: {exc}")
-        print(f"         Ensure server is up: docker compose up mlflow -d")
-        print(f"         Client version: pip install mlflow=={MLFLOW_VERSION}")
+        print("         Start server: docker compose up mlflow -d")
         return None
 
 
@@ -187,16 +291,13 @@ def log_evaluation_run(
     results_dir: str,
     metrics: dict[str, float] | None = None,
 ) -> None:
-    """
-    Append evaluation metrics/artifacts to the latest training run, or open a new run.
-    """
     if not _enabled():
         return
 
     try:
         import mlflow
     except ImportError:
-        print("[MLflow] mlflow not installed — pip install mlflow==2.9.2")
+        print("[MLflow] mlflow not installed — pip install mlflow==2.17.0")
         return
 
     _warn_if_client_version_mismatch()
@@ -242,22 +343,19 @@ def log_evaluation_run(
 
     except Exception as exc:
         print(f"[MLflow] Evaluation log failed: {exc}")
-        print(f"         Ensure server is up: docker compose up mlflow -d")
 
 
 def log_full_snapshot(artifacts_dir: str, models_dir: str, results_dir: str) -> None:
-    """Manual: log current files + report metrics in one run."""
     if not _enabled():
         return
 
     try:
         import mlflow
     except ImportError:
-        print("[MLflow] mlflow not installed — pip install mlflow==2.9.2")
+        print("[MLflow] mlflow not installed — pip install mlflow==2.17.0")
         return
 
     _warn_if_client_version_mismatch()
-
     report_path = os.path.join(results_dir, "evaluation_report.txt")
     metrics = parse_evaluation_report(report_path)
 

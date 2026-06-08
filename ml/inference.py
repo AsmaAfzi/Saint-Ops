@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
 from typing import Any
 
 import joblib
@@ -176,18 +177,104 @@ def classify_windows(
     )
 
 
-def load_artifacts(artifacts_dir: str, models_dir: str) -> dict[str, Any]:
-    meta_path = os.path.join(artifacts_dir, "feature_meta.json")
+def _default_registry_uri(stage: str = "Production") -> str:
+    name = os.environ.get("MLFLOW_REGISTERED_MODEL", "SAINT")
+    return os.environ.get("MLFLOW_MODEL_URI", f"models:/{name}/{stage}")
+
+
+def resolve_registry_run_id(registry_uri: str) -> str | None:
+    """Resolve models:/NAME/STAGE to the backing MLflow run_id."""
+    if not registry_uri.startswith("models:/"):
+        return None
+    parts = registry_uri.replace("models:/", "").split("/")
+    if len(parts) < 2:
+        return None
+    name, stage = parts[0], parts[1]
+    try:
+        from mlflow.tracking import MlflowClient
+
+        uri = os.environ.get("MLFLOW_TRACKING_URI", "http://127.0.0.1:5000")
+        client = MlflowClient(tracking_uri=uri)
+        versions = client.get_latest_versions(name, stages=[stage])
+        if not versions:
+            return None
+        return versions[0].run_id
+    except Exception:
+        return None
+
+
+def _load_keras_model(
+    models_dir: str,
+    registry_uri: str | None = None,
+) -> tuple[Any, str, str | None]:
+    """
+    Load Keras model from MLflow Model Registry with local fallback.
+    Returns (model, source, run_id).
+    """
+    registry_uri = registry_uri or _default_registry_uri("Production")
+    local_path = os.path.join(models_dir, "lstm_autoencoder.keras")
+    run_id: str | None = None
+
+    if os.environ.get("MLFLOW_DISABLED", "").lower() in ("1", "true", "yes"):
+        return load_model(local_path), "local", None
+
+    try:
+        import mlflow
+        import mlflow.keras
+
+        mlflow.set_tracking_uri(os.environ.get("MLFLOW_TRACKING_URI", "http://127.0.0.1:5000"))
+        run_id = resolve_registry_run_id(registry_uri)
+        cache_dir = tempfile.mkdtemp(prefix="saint_mlflow_")
+        model = mlflow.keras.load_model(registry_uri, dst_path=cache_dir)
+        print(f"[MLflow] Model loaded from registry: {registry_uri}")
+        return model, "registry", run_id
+    except Exception as exc:
+        print(f"[MLflow] Registry unavailable ({type(exc).__name__}: {exc}), loading local file")
+        return load_model(local_path), "local", None
+
+
+def _artifact_base_dir(artifacts_dir: str, run_id: str | None) -> str:
+    """Prefer MLflow run artifacts when model came from registry."""
+    if not run_id:
+        return artifacts_dir
+    try:
+        from mlflow.tracking import MlflowClient
+
+        uri = os.environ.get("MLFLOW_TRACKING_URI", "http://127.0.0.1:5000")
+        cache = tempfile.mkdtemp(prefix="saint_mlflow_art_")
+        client = MlflowClient(tracking_uri=uri)
+        downloaded = client.download_artifacts(run_id, "artifacts", cache)
+        base = downloaded if os.path.isdir(downloaded) else cache
+        if os.path.isfile(os.path.join(base, "feature_meta.json")):
+            print(f"[MLflow] Threshold artifacts loaded from run {run_id}")
+            return base
+    except Exception as exc:
+        print(f"[MLflow] Run artifact download failed ({exc}), using local artifacts/")
+    return artifacts_dir
+
+
+def load_artifacts(
+    artifacts_dir: str,
+    models_dir: str,
+    registry_uri: str | None = None,
+) -> dict[str, Any]:
+    model, model_source, run_id = _load_keras_model(models_dir, registry_uri=registry_uri)
+    art_dir = _artifact_base_dir(artifacts_dir, run_id if model_source == "registry" else None)
+
+    meta_path = os.path.join(art_dir, "feature_meta.json")
     with open(meta_path, encoding="utf-8") as f:
         meta = json.load(f)
 
     return {
-        "model": load_model(os.path.join(models_dir, "lstm_autoencoder.keras")),
-        "scaler": joblib.load(os.path.join(artifacts_dir, "scaler.pkl")),
-        "global_threshold": float(np.load(os.path.join(artifacts_dir, "global_threshold.npy"))),
-        "env_thresholds": np.load(os.path.join(artifacts_dir, "env_thresholds.npy")),
-        "sensor_threshold": float(np.load(os.path.join(artifacts_dir, "sensor_threshold.npy"))),
-        "normal_pf": np.load(os.path.join(artifacts_dir, "normal_errors_per_feature.npy")),
+        "model": model,
+        "model_source": model_source,
+        "registry_run_id": run_id,
+        "registry_uri": registry_uri or _default_registry_uri("Production"),
+        "scaler": joblib.load(os.path.join(art_dir, "scaler.pkl")),
+        "global_threshold": float(np.load(os.path.join(art_dir, "global_threshold.npy"))),
+        "env_thresholds": np.load(os.path.join(art_dir, "env_thresholds.npy")),
+        "sensor_threshold": float(np.load(os.path.join(art_dir, "sensor_threshold.npy"))),
+        "normal_pf": np.load(os.path.join(art_dir, "normal_errors_per_feature.npy")),
         "meta": meta,
     }
 
@@ -197,6 +284,7 @@ def build_stream_timeline(
     artifacts_dir: str,
     models_dir: str,
     window_filter: str = "drift",
+    registry_uri: str | None = None,
 ) -> dict[str, Any]:
     """
     Precompute per-timestep arrays for simulated real-time replay.
@@ -204,7 +292,9 @@ def build_stream_timeline(
     Returns dict with df, feature_error (T,F), predicted_drift, drift_type (coarse),
     drift_type_fine, feature_names, env_idxs, sensor_idx, thresholds.
     """
-    bundle = load_artifacts(artifacts_dir, models_dir)
+    uri = registry_uri or _default_registry_uri("Production")
+    bundle = load_artifacts(artifacts_dir, models_dir, registry_uri=uri)
+    model_source = bundle.get("model_source", "local")
     meta = bundle["meta"]
     all_features: list[str] = meta["all_features"]
     env_idxs: list[int] = meta["env_indices"]
@@ -260,4 +350,8 @@ def build_stream_timeline(
         "window_size": window_size,
         "source": data_path,
         "classifier_version": "v7_rolling_p99",
+        "model_source": model_source,
+        "mlflow_model_uri": uri,
+        "registry_run_id": bundle.get("registry_run_id"),
+        "registry_version_stage": uri.split("/")[-1] if uri.startswith("models:/") else None,
     }

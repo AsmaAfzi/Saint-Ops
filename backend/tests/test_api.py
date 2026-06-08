@@ -34,6 +34,8 @@ backend_module._stream = {
     "global_threshold": 0.1,
     "window_size": 10,
     "source": "mock",
+    "model_source": "local",
+    "mlflow_model_uri": "models:/SAINT/Production",
 }
 
 from backend import app  # noqa: E402
@@ -66,3 +68,31 @@ def test_drift_data_out_of_bounds():
     response = client.get("/drift_data?t=999999")
     assert response.status_code == 200
     assert response.json()["done"] is True
+
+
+def test_models_reload(monkeypatch):
+    dummy = backend_module._stream
+
+    def _fake_timeline(**_kwargs):
+        return dummy
+
+    monkeypatch.setattr(backend_module, "build_stream_timeline", _fake_timeline)
+    response = client.post("/models/reload")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["ok"] is True
+    assert "mlflow_model_uri" in data
+
+
+def test_models_info():
+    response = client.get("/models/info")
+    assert response.status_code == 200
+    body = response.json()
+    assert "production_uri" in body or "error" in body
+
+
+def test_drift_data_served_variant():
+    response = client.get("/drift_data?t=25&variant=production")
+    assert response.status_code == 200
+    data = response.json()
+    assert data.get("served_variant") == "production"

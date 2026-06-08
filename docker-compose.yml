@@ -1,4 +1,3 @@
-version: "3.9"
 services:
 
   backend:
@@ -13,12 +12,18 @@ services:
       ARTIFACTS_DIR: /app/artifacts
       MODELS_DIR: /app/models
       STREAM_CSV: /app/data/scenario_C_annulus.csv
-      MLFLOW_TRACKING_URI: http://saint-mlflow:5000
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      MLFLOW_REGISTERED_MODEL: SAINT
+      MLFLOW_MODEL_URI: models:/SAINT/Production
+      MLFLOW_SHADOW_MODEL_URI: models:/SAINT/Staging
+      MLFLOW_SHADOW_TRAFFIC_PCT: "0"
+      MLFLOW_EXPERIMENT_NAME: SAINT-Drift-Detection
+      MLFLOW_REQUIRE_APPROVAL: "0"
     volumes:
       - ./artifacts:/app/artifacts
       - ./models:/app/models
       - ./data:/app/data
-      - ./mlflow-data:/mlflow
+      - ./mlflow-data:/mlflow:ro
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 30s
@@ -55,8 +60,15 @@ services:
       - ./models:/app/models
       - ./artifacts:/app/artifacts
       - ./ml:/app/ml
+      - ./mlflow-data:/mlflow
     environment:
       MLFLOW_TRACKING_URI: http://mlflow:5000
+      MLFLOW_EXPERIMENT_NAME: SAINT-Drift-Detection
+      MLFLOW_REGISTERED_MODEL: SAINT
+      MLFLOW_AUTO_STAGE: "1"
+      MLFLOW_AUTO_PROMOTE: "0"
+      MLFLOW_PROMOTION_MIN_F1_DELTA: "0.0"
+      GIT_PYTHON_REFRESH: quiet
     depends_on:
       - mlflow
     networks:
@@ -65,17 +77,40 @@ services:
       - train
 
   mlflow:
-    image: ghcr.io/mlflow/mlflow:v2.9.2
+    image: ghcr.io/mlflow/mlflow:v2.17.0
     container_name: saint-mlflow
     ports:
       - "5000:5000"
+    environment:
+      MLFLOW_ARTIFACT_ROOT: ${MLFLOW_ARTIFACT_ROOT:-/mlflow/artifacts}
+      MLFLOW_BACKEND_STORE_URI: ${MLFLOW_BACKEND_STORE_URI:-sqlite:///mlflow/mlflow.db}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      MLFLOW_S3_ENDPOINT_URL: ${MLFLOW_S3_ENDPOINT_URL:-}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
     volumes:
       - ./mlflow-data:/mlflow
-    command: >
-      mlflow server
-      --host 0.0.0.0
-      --backend-store-uri sqlite:///mlflow/mlflow.db
-      --default-artifact-root /mlflow/artifacts
+      - ./scripts/entrypoint-mlflow.sh:/entrypoint.sh:ro
+    entrypoint: ["/bin/sh", "/entrypoint.sh"]
+    networks:
+      - saint-network
+
+  # Optional S3-compatible store (MinIO). Usage:
+  #   MLFLOW_ARTIFACT_ROOT=s3://saint-mlflow/artifacts docker compose --profile s3 up -d
+  minio:
+    image: minio/minio:RELEASE.2024-12-18T13-15-44Z
+    container_name: saint-minio
+    profiles:
+      - s3
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minio12345}
+    command: server /data --console-address ":9001"
+    volumes:
+      - ./minio-data:/data
     networks:
       - saint-network
 
