@@ -1,3 +1,4 @@
+version: "3.9"
 services:
 
   backend:
@@ -12,16 +13,21 @@ services:
       ARTIFACTS_DIR: /app/artifacts
       MODELS_DIR: /app/models
       STREAM_CSV: /app/data/scenario_C_annulus.csv
+      MLFLOW_TRACKING_URI: http://saint-mlflow:5000
     volumes:
       - ./artifacts:/app/artifacts
       - ./models:/app/models
       - ./data:/app/data
+      - ./mlflow-data:/mlflow
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 30s
       timeout: 10s
       start_period: 120s
       retries: 5
+    depends_on:
+      mlflow:
+        condition: service_started
     networks:
       - saint-network
 
