@@ -1,0 +1,47 @@
+# saint-staging namespace — pre-production validation
+global:
+  namespace: saint-staging
+
+backend:
+  replicaCount: 3
+  service:
+    type: ClusterIP
+  mlflow:
+    requireApproval: "1"
+    shadowTrafficPct: "25"
+
+frontend:
+  replicaCount: 2
+  service:
+    type: ClusterIP
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 8
+  latency:
+    enabled: false
+
+persistence:
+  enabled: true
+  size: 30Gi
+  storageClass: gp3
+
+ingress:
+  enabled: true
+  className: nginx
+  hosts:
+    - host: saint-staging.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+          service: frontend
+        - path: /api
+          pathType: Prefix
+          service: backend
+
+cronJobs:
+  driftReport:
+    schedule: "0 6 * * *"
+  dataFreshness:
+    maxAgeHours: 72

@@ -1,0 +1,80 @@
+# saint-production namespace
+global:
+  namespace: saint-production
+
+backend:
+  replicaCount: 3
+  service:
+    type: LoadBalancer
+  resources:
+    requests:
+      cpu: "1"
+      memory: 2Gi
+    limits:
+      cpu: "4"
+      memory: 8Gi
+  mlflow:
+    requireApproval: "1"
+    shadowTrafficPct: "0"
+
+frontend:
+  replicaCount: 2
+  service:
+    type: LoadBalancer
+
+mlflow:
+  service:
+    type: ClusterIP
+  artifactRoot: s3://saint-mlflow/artifacts
+  backendStoreUri: sqlite:///mlflow/mlflow.db
+  s3:
+    enabled: true
+    endpointUrl: ""  # set via secret / external secrets operator
+    region: me-central-1
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  latency:
+    enabled: true
+    targetAverageValue: "2"
+
+persistence:
+  enabled: true
+  size: 100Gi
+  storageClass: gp3
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    - host: saint.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+          service: frontend
+        - path: /api
+          pathType: Prefix
+          service: backend
+  tls:
+    - secretName: saint-tls
+      hosts:
+        - saint.example.com
+
+secrets:
+  create: true
+  # Prefer External Secrets / Sealed Secrets in real prod
+
+cronJobs:
+  driftReport:
+    schedule: "0 5 * * *"
+  dataFreshness:
+    schedule: "0 */2 * * *"
+    maxAgeHours: 48
+
+podAntiAffinity:
+  enabled: true

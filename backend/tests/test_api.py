@@ -1,56 +1,142 @@
-import pytest
+import os
+import sys
+
 import numpy as np
 import pandas as pd
-from unittest.mock import patch, MagicMock
-import sys
-import os
+from fastapi.testclient import TestClient
 
-# Add backend module to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# ── Mock all heavy files BEFORE importing backend ────────
+import backend as backend_module
+
+N = 100
 dummy_df = pd.DataFrame({
-    "DATEPRD": pd.date_range("2020-01-01", periods=100),
-    "AVG_DOWNHOLE_PRESSURE": np.random.rand(100),
-    "AVG_DOWNHOLE_TEMPERATURE": np.random.rand(100),
-    "BORE_OIL_VOL": np.random.rand(100),
-    "AVG_WHP_P": np.random.rand(100),
-    "DP_CHOKE_SIZE": np.random.rand(100),
-    "window": ["baseline"] * 30 + ["normal"] * 50 + ["drift"] * 20
+    "DATEPRD": pd.date_range("2020-01-01", periods=N),
 })
 
-dummy_array = np.zeros(100)
-dummy_2d = np.zeros((100, 5))
+_err = np.random.rand(N, 5).astype(np.float64)
+_norm = np.random.rand(N, 5).astype(np.float64) * 1.2
+_cusum = np.random.rand(N, 5).astype(np.float64) * 5.0
+_val_p99 = np.array([0.14, 1.86, 1.03, 0.87, 3.38])
 
-with patch("pandas.read_excel", return_value=dummy_df), \
-     patch("numpy.load", return_value=dummy_array), \
-     patch("joblib.load", return_value=MagicMock()), \
-     patch("tensorflow.keras.models.load_model", return_value=MagicMock()):
-    from backend import app
+backend_module._stream = {
+    "df": dummy_df,
+    "feature_error": _err,
+    "norm_errors": _norm,
+    "cusum_s_pos": _cusum,
+    "val_p99": _val_p99,
+    "predicted_drift": np.array([False] * 20 + [True] * 80),
+    "drift_type": np.array(["No Drift"] * 20 + ["Sensor Drift"] * 80, dtype=object),
+    "drift_type_fine": np.array(["No Drift"] * 20 + ["Sensor Fault: Annulus Pressure Gauge"] * 80, dtype=object),
+    "feature_names": [
+        "AVG_DOWNHOLE_PRESSURE",
+        "AVG_DOWNHOLE_TEMPERATURE",
+        "BORE_OIL_VOL",
+        "AVG_WHP_P",
+        "AVG_ANNULUS_PRESS",
+    ],
+    "env_idxs": [0, 1, 2, 3],
+    "sensor_idx": 4,
+    "sensor_threshold": 0.05,
+    "env_thresholds": np.array([0.01, 0.01, 0.01, 0.01]),
+    "global_threshold": 0.1,
+    "window_size": 10,
+    "source": "mock",
+    "model_source": "local",
+    "mlflow_model_uri": "models:/SAINT/Production",
+    "classifier_version": "v8_fixed_val_p99",
+    "detector_config": {"cusum_k": 0.9, "cusum_h": 4.0, "normalisation": "fixed_val_p99"},
+}
 
-from fastapi.testclient import TestClient
+from backend import app  # noqa: E402
+
 client = TestClient(app)
 
-# ── Test 1: Health endpoint ──────────────────────────────
+
 def test_health():
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
 
-# ── Test 2: Ready endpoint ───────────────────────────────
+
+def test_metrics():
+    response = client.get("/metrics")
+    assert response.status_code == 200
+    assert "saint_http_requests_total" in response.text
+
+
 def test_ready():
     response = client.get("/ready")
     assert response.status_code == 200
+    assert response.json()["status"] == "ready"
 
-# ── Test 3: Drift data returns valid structure ────────────
+
 def test_drift_data_structure():
-    response = client.get("/drift_data?t=0")
+    response = client.get("/drift_data?t=25")
     assert response.status_code == 200
     data = response.json()
-    assert "time" in data or "done" in data
+    assert "time" in data
+    assert data["feature_names"] == backend_module._stream["feature_names"]
+    assert len(data["feature_error"]) == 5
+    assert data["classifier_version"] == "v8_fixed_val_p99"
+    assert len(data["explanation"]) > 0
+    assert "norm_error" in data["explanation"][0]
 
-# ── Test 4: Out of bounds returns done ───────────────────
+
 def test_drift_data_out_of_bounds():
     response = client.get("/drift_data?t=999999")
     assert response.status_code == 200
-    assert response.json()["done"] == True
+    assert response.json()["done"] is True
+
+
+def test_models_reload(monkeypatch):
+    dummy = backend_module._stream
+
+    def _fake_timeline(**_kwargs):
+        return dummy
+
+    monkeypatch.setattr(backend_module, "build_stream_timeline", _fake_timeline)
+    response = client.post("/models/reload")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["ok"] is True
+    assert "mlflow_model_uri" in data
+
+
+def test_models_info():
+    response = client.get("/models/info")
+    assert response.status_code == 200
+    body = response.json()
+    assert "production_uri" in body or "error" in body
+
+
+def test_drift_data_served_variant():
+    response = client.get("/drift_data?t=25&variant=production")
+    assert response.status_code == 200
+    data = response.json()
+    assert data.get("served_variant") == "production"
+
+
+def test_ops_drift_summary():
+    response = client.get("/ops/drift-summary")
+    assert response.status_code == 200
+    body = response.json()
+    assert "consecutive_env_drift_windows" in body
+    assert "retrain_threshold_windows" in body
+
+
+def test_retrain_trigger_and_status(tmp_path, monkeypatch):
+    monkeypatch.setenv("RETRAIN_TRIGGER_DIR", str(tmp_path))
+    response = client.post("/retrain/trigger", json={"reason": "pytest"})
+    assert response.status_code == 200
+    assert response.json()["ok"] is True
+    status = client.get("/retrain/status")
+    assert status.status_code == 200
+    assert status.json()["state"]["last_status"] == "queued"
+
+
+def test_metrics_ml_counters():
+    client.get("/drift_data?t=30")
+    response = client.get("/metrics")
+    assert "saint_drift_detections_total" in response.text
+    assert "saint_reconstruction_error" in response.text

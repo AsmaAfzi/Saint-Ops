@@ -112,6 +112,121 @@ Then open:
 | ⚡ API + Swagger Docs | http://localhost:8000/docs |
 | 🏥 Health Check | http://localhost:8000/health |
 | 📊 MLflow Model Registry | http://localhost:5000 |
+| 📈 Grafana (with `--profile monitoring`) | http://localhost:3001 |
+| 🔄 Airflow (with `--profile airflow`) | http://localhost:8080 |
+
+**Full demo (monitoring + retraining):**
+
+```bash
+docker compose --profile monitoring --profile airflow up -d --build
+# Windows: .\scripts\demo_stack.ps1
+```
+
+### Model lifecycle (Phase 3)
+
+1. **Train** → new version auto-promoted to **Staging**:
+   ```bash
+   docker compose --profile train run --rm train python ml/train_model.py
+   docker compose --profile train run --rm train python ml/test_model.py
+   ```
+2. **Compare** Staging vs Production:
+   ```bash
+   curl http://localhost:8000/models/compare
+   # or: docker compose --profile train run --rm train python ml/promote_model.py compare
+   ```
+3. **Approve** (optional, when `MLFLOW_REQUIRE_APPROVAL=1`):
+   ```bash
+   curl -X POST http://localhost:8000/models/approve
+   ```
+4. **Promote** Staging → Production (gated on metrics):
+   ```bash
+   curl -X POST http://localhost:8000/models/promote -H "Content-Type: application/json" -d "{}"
+   curl -X POST http://localhost:8000/models/reload
+   ```
+5. **Rollback** one command:
+   ```bash
+   curl -X POST http://localhost:8000/models/rollback
+   curl -X POST http://localhost:8000/models/reload
+   ```
+
+**Shadow / canary:** set `MLFLOW_SHADOW_TRAFFIC_PCT=25` to serve 25% of `/drift_data` from `models:/SAINT/Staging`, or use `?variant=shadow` for explicit shadow responses. Compare at a timestep: `GET /models/shadow/compare?t=50`.
+
+**S3 artifacts:** copy `.env.example` → `.env`, set `MLFLOW_ARTIFACT_ROOT=s3://...`, optionally `docker compose --profile s3 up -d minio`.
+
+### Kubernetes deployment (Phase 4)
+
+```bash
+# Install (dev cluster)
+helm upgrade --install saint-dev ./helm/saint-ops \
+  -f helm/saint-ops/values-dev.yaml \
+  -n saint-dev --create-namespace
+
+# Seed PVC from local data/models/artifacts
+./scripts/k8s_seed_data.sh saint-dev
+
+# Port-forward UI + API
+kubectl port-forward -n saint-dev svc/saint-dev-saint-ops-frontend 3000:80
+kubectl port-forward -n saint-dev svc/saint-dev-saint-ops-backend 8000:8000
+```
+
+| Environment | Namespace | Values file |
+|-------------|-----------|-------------|
+| Dev | `saint-dev` | `helm/saint-ops/values-dev.yaml` |
+| Staging | `saint-staging` | `helm/saint-ops/values-staging.yaml` |
+| Production | `saint-production` | `helm/saint-ops/values-production.yaml` |
+
+See [helm/saint-ops/README.md](helm/saint-ops/README.md) for HPA, CronJobs, and S3 production setup.
+
+### Monitoring stack (Phase 5)
+
+```bash
+docker compose --profile monitoring up -d
+```
+
+| Service | URL | Credentials |
+|---------|-----|-------------|
+| Grafana | http://localhost:3001 | admin / admin |
+| Prometheus | http://localhost:9090 | — |
+| Alertmanager | http://localhost:9093 | — |
+
+Pre-built dashboard: **SAINT-OPS Overview** (request rate, inference p95, drift detections, retrain jobs).
+
+### Auto-retraining (Phase 6)
+
+```bash
+docker compose --profile airflow up -d
+```
+
+| Service | URL | Credentials |
+|---------|-----|-------------|
+| Airflow UI | http://localhost:8080 | admin / admin |
+
+**DAGs:** `saint_retrain` (train → evaluate → F1 gate → MLflow Staging), `saint_drift_sensor` (polls `/ops/drift-summary`).
+
+Manual trigger from API:
+
+```bash
+curl -X POST http://localhost:8000/retrain/trigger -H "Content-Type: application/json" -d "{\"reason\":\"demo\"}"
+```
+
+Or trigger `saint_retrain` from the Airflow UI.
+
+### Terraform local cluster (Phase 7 — $0)
+
+```bash
+cd terraform && terraform init && terraform apply
+```
+
+See [terraform/README.md](terraform/README.md). Uses **Docker Desktop Kubernetes** — no AWS/Azure charges.
+
+### Load & security testing (Phase 8)
+
+```bash
+pip install locust
+locust -f tests/load/locustfile.py --host http://localhost:8000
+```
+
+CI runs **Trivy** (CRITICAL CVE gate) and a headless Locust smoke test on every push.
 
 ---
 
@@ -162,12 +277,12 @@ Docker images are publicly available:
 |-------|--------|-------------|
 | Phase 1 — Containerization | ✅ Complete | Docker + Docker Compose for all 3 services |
 | Phase 2 — CI/CD | ✅ Complete | GitHub Actions: test → lint → build → push to Docker Hub |
-| Phase 3 — MLflow Registry | 🔄 In Progress | Model versioning, experiment tracking |
-| Phase 4 — Kubernetes | ⏳ Planned | Helm charts, HPA autoscaling, self-healing |
-| Phase 5 — Monitoring | ⏳ Planned | Prometheus + Grafana dashboards |
-| Phase 6 — Auto-retraining | ⏳ Planned | Drift-triggered Airflow DAG |
-| Phase 7 — Terraform IaC | ⏳ Planned | AWS/Azure deployment (UAE region) |
-| Phase 8 — Hardening | ⏳ Planned | CVE scanning, RBAC, load testing |
+| Phase 3 — MLflow Registry | ✅ Complete | Staging→Production lifecycle, comparison gates, S3 artifacts, shadow serving, rollback API |
+| Phase 4 — Kubernetes | ✅ Complete | Helm chart, HPA, PVCs, CronJobs, env values (dev/staging/prod) |
+| Phase 5 — Monitoring | ✅ Complete | Prometheus + Grafana + Alertmanager (local profile) |
+| Phase 6 — Auto-retraining | ✅ Complete | Airflow DAGs, drift sensor, `/retrain/*` API |
+| Phase 7 — Terraform IaC | ✅ Complete | Docker Desktop K8s + Helm via Terraform (zero cloud cost) |
+| Phase 8 — Hardening | ✅ Complete | Trivy CI, Locust load tests, K8s RBAC + NetworkPolicy |
 
 ---
 

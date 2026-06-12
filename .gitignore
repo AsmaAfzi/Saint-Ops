@@ -1,0 +1,19 @@
+# Python virtual environments (Option A: separate ML vs backend)
+.venv-ml/
+.venv-backend/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# MLflow local data
+mlflow-data/
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

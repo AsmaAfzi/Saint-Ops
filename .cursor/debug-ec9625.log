@@ -1,0 +1,137 @@
+{"sessionId": "ec9625", "location": "backend.py:lifespan", "message": "warmup_start", "data": {}, "hypothesisId": "H2", "timestamp": 1781016083741}
+{"sessionId": "ec9625", "location": "backend.py:get_stream", "message": "build_stream_start", "data": {"registry_uri": "models:/SAINT/Production", "cached": false}, "hypothesisId": "H2", "timestamp": 1781016084346}
+{"sessionId": "ec9625", "location": "backend.py:lifespan", "message": "warmup_start", "data": {}, "hypothesisId": "H2", "timestamp": 1781016421850}
+{"sessionId": "ec9625", "location": "backend.py:get_stream", "message": "build_stream_start", "data": {"registry_uri": "models:/SAINT/Production", "cached": false}, "hypothesisId": "H2", "timestamp": 1781016422085}
+{"sessionId": "ec9625", "location": "backend.py:lifespan", "message": "warmup_start", "data": {}, "hypothesisId": "H2", "timestamp": 1781016685346}
+{"sessionId": "ec9625", "location": "backend.py:get_stream", "message": "build_stream_start", "data": {"registry_uri": "models:/SAINT/Production", "cached": false}, "hypothesisId": "H2", "timestamp": 1781016685866}
+{"sessionId": "ec9625", "location": "backend.py:get_stream", "message": "build_stream_done", "data": {"registry_uri": "models:/SAINT/Production", "elapsed_ms": 14361, "rows": 173}, "hypothesisId": "H2", "timestamp": 1781016700227}
+{"sessionId": "ec9625", "location": "backend.py:lifespan", "message": "warmup_done", "data": {"elapsed_ms": 14905}, "hypothesisId": "H2", "timestamp": 1781016700252}
+{"sessionId":"ec9625","location":"App.jsx:mount","message":"app_mounted","data":{"since_nav_ms":3277},"hypothesisId":"H1","timestamp":1781016897396}
+{"sessionId":"ec9625","location":"App.jsx:poll","message":"drift_fetch_start","data":{"t":10},"hypothesisId":"H4","timestamp":1781016897423}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781016897398}
+{"sessionId": "ec9625", "location": "backend.py:ready", "message": "ready_ok", "data": {"elapsed_ms": 3, "shadow_ready": false, "shadow_cached": false}, "hypothesisId": "H5", "timestamp": 1781016897607}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_done","data":{"elapsed_ms":892,"ready_status":"ready"},"hypothesisId":"H5","timestamp":1781016898290}
+{"sessionId":"ec9625","location":"App.jsx:mount","message":"app_mounted","data":{"since_nav_ms":4301},"hypothesisId":"H1","timestamp":1781016898419}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781016898420}
+{"sessionId":"ec9625","location":"App.jsx:poll","message":"drift_fetch_done","data":{"t":10,"elapsed_ms":1210,"done":false,"first_poll_ms":1709},"hypothesisId":"H4","timestamp":1781016898633}
+{"sessionId": "ec9625", "location": "backend.py:ready", "message": "ready_ok", "data": {"elapsed_ms": 0, "shadow_ready": false, "shadow_cached": false}, "hypothesisId": "H5", "timestamp": 1781016898536}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_done","data":{"elapsed_ms":413,"ready_status":"ready"},"hypothesisId":"H5","timestamp":1781016898833}
+{"sessionId":"ec9625","location":"App.jsx:poll","message":"drift_fetch_start","data":{"t":11},"hypothesisId":"H4","timestamp":1781016899143}
+{"sessionId":"ec9625","location":"App.jsx:poll","message":"drift_fetch_done","data":{"t":11,"elapsed_ms":29,"done":false,"first_poll_ms":2248},"hypothesisId":"H4","timestamp":1781016899172}
+{"sessionId":"ec9625","location":"App.jsx:poll","message":"drift_fetch_start","data":{"t":12},"hypothesisId":"H4","timestamp":1781016899678}
+{"sessionId":"ec9625","location":"App.jsx:poll","message":"drift_fetch_done","data":{"t":12,"elapsed_ms":22,"done":false,"first_poll_ms":2775},"hypothesisId":"H4","timestamp":1781016899699}
+{"sessionId":"ec9625","location":"App.jsx:poll","message":"drift_fetch_start","data":{"t":13},"hypothesisId":"H4","timestamp":1781016900201}
+{"sessionId":"ec9625","location":"App.jsx:poll","message":"drift_fetch_done","data":{"t":13,"elapsed_ms":30,"done":false,"first_poll_ms":3307},"hypothesisId":"H4","timestamp":1781016900231}
+{"sessionId":"ec9625","location":"App.jsx:poll","message":"drift_fetch_start","data":{"t":14},"hypothesisId":"H4","timestamp":1781016900742}
+{"sessionId":"ec9625","location":"App.jsx:poll","message":"drift_fetch_done","data":{"t":14,"elapsed_ms":25,"done":false,"first_poll_ms":3842},"hypothesisId":"H4","timestamp":1781016900766}
+{"sessionId":"ec9625","location":"App.jsx:poll","message":"drift_fetch_start","data":{"t":15},"hypothesisId":"H4","timestamp":1781016901269}
+{"sessionId":"ec9625","location":"App.jsx:poll","message":"drift_fetch_done","data":{"t":15,"elapsed_ms":18,"done":false,"first_poll_ms":4362},"hypothesisId":"H4","timestamp":1781016901287}
+{"sessionId":"ec9625","location":"App.jsx:poll","message":"drift_fetch_start","data":{"t":16},"hypothesisId":"H4","timestamp":1781016901788}
+{"sessionId":"ec9625","location":"App.jsx:poll","message":"drift_fetch_done","data":{"t":16,"elapsed_ms":21,"done":false,"first_poll_ms":4885},"hypothesisId":"H4","timestamp":1781016901809}
+{"sessionId":"ec9625","location":"App.jsx:poll","message":"drift_fetch_start","data":{"t":17},"hypothesisId":"H4","timestamp":1781016902311}
+{"sessionId":"ec9625","location":"App.jsx:poll","message":"drift_fetch_done","data":{"t":17,"elapsed_ms":37,"done":false,"first_poll_ms":5424},"hypothesisId":"H4","timestamp":1781016902348}
+{"sessionId":"ec9625","location":"App.jsx:poll","message":"drift_fetch_start","data":{"t":18},"hypothesisId":"H4","timestamp":1781016902853}
+{"sessionId":"ec9625","location":"App.jsx:poll","message":"drift_fetch_done","data":{"t":18,"elapsed_ms":20,"done":false,"first_poll_ms":5948},"hypothesisId":"H4","timestamp":1781016902872}
+{"sessionId":"ec9625","location":"App.jsx:poll","message":"drift_fetch_start","data":{"t":19},"hypothesisId":"H4","timestamp":1781016903378}
+{"sessionId":"ec9625","location":"App.jsx:poll","message":"drift_fetch_done","data":{"t":19,"elapsed_ms":39,"done":false,"first_poll_ms":6493},"hypothesisId":"H4","timestamp":1781016903417}
+{"sessionId":"ec9625","location":"App.jsx:poll","message":"drift_fetch_start","data":{"t":20},"hypothesisId":"H4","timestamp":1781016903921}
+{"sessionId":"ec9625","location":"App.jsx:poll","message":"drift_fetch_done","data":{"t":20,"elapsed_ms":19,"done":false,"first_poll_ms":7016},"hypothesisId":"H4","timestamp":1781016903940}
+{"sessionId":"ec9625","location":"App.jsx:poll","message":"drift_fetch_start","data":{"t":21},"hypothesisId":"H4","timestamp":1781016904442}
+{"sessionId":"ec9625","location":"App.jsx:poll","message":"drift_fetch_done","data":{"t":21,"elapsed_ms":22,"done":false,"first_poll_ms":7540},"hypothesisId":"H4","timestamp":1781016904464}
+{"sessionId":"ec9625","location":"App.jsx:poll","message":"drift_fetch_start","data":{"t":22},"hypothesisId":"H4","timestamp":1781016904969}
+{"sessionId":"ec9625","location":"App.jsx:poll","message":"drift_fetch_done","data":{"t":22,"elapsed_ms":19,"done":false,"first_poll_ms":8063},"hypothesisId":"H4","timestamp":1781016904988}
+{"sessionId":"ec9625","location":"App.jsx:poll","message":"drift_fetch_start","data":{"t":23},"hypothesisId":"H4","timestamp":1781016905492}
+{"sessionId":"ec9625","location":"App.jsx:poll","message":"drift_fetch_done","data":{"t":23,"elapsed_ms":30,"done":false,"first_poll_ms":8598},"hypothesisId":"H4","timestamp":1781016905522}
+{"sessionId":"ec9625","location":"App.jsx:poll","message":"drift_fetch_start","data":{"t":24},"hypothesisId":"H4","timestamp":1781016906028}
+{"sessionId":"ec9625","location":"App.jsx:poll","message":"drift_fetch_done","data":{"t":24,"elapsed_ms":91,"done":false,"first_poll_ms":9194},"hypothesisId":"H4","timestamp":1781016906119}
+{"sessionId":"ec9625","location":"App.jsx:poll","message":"drift_fetch_start","data":{"t":25},"hypothesisId":"H4","timestamp":1781016906620}
+{"sessionId":"ec9625","location":"App.jsx:poll","message":"drift_fetch_done","data":{"t":25,"elapsed_ms":32,"done":false,"first_poll_ms":9728},"hypothesisId":"H4","timestamp":1781016906652}
+{"sessionId":"ec9625","location":"App.jsx:poll","message":"drift_fetch_start","data":{"t":26},"hypothesisId":"H4","timestamp":1781016907160}
+{"sessionId":"ec9625","location":"App.jsx:poll","message":"drift_fetch_done","data":{"t":26,"elapsed_ms":18,"done":false,"first_poll_ms":10254},"hypothesisId":"H4","timestamp":1781016907178}
+{"sessionId":"ec9625","location":"App.jsx:poll","message":"drift_fetch_start","data":{"t":27},"hypothesisId":"H4","timestamp":1781016907692}
+{"sessionId":"ec9625","location":"App.jsx:poll","message":"drift_fetch_done","data":{"t":27,"elapsed_ms":17,"done":false,"first_poll_ms":10785},"hypothesisId":"H4","timestamp":1781016907710}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781016928510}
+{"sessionId": "ec9625", "location": "backend.py:ready", "message": "ready_ok", "data": {"elapsed_ms": 0, "shadow_ready": false, "shadow_cached": false}, "hypothesisId": "H5", "timestamp": 1781016928539}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_done","data":{"elapsed_ms":113,"ready_status":"ready"},"hypothesisId":"H5","timestamp":1781016928622}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781016958508}
+{"sessionId": "ec9625", "location": "backend.py:ready", "message": "ready_ok", "data": {"elapsed_ms": 0, "shadow_ready": false, "shadow_cached": false}, "hypothesisId": "H5", "timestamp": 1781016958570}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_done","data":{"elapsed_ms":247,"ready_status":"ready"},"hypothesisId":"H5","timestamp":1781016958755}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781016988509}
+{"sessionId": "ec9625", "location": "backend.py:ready", "message": "ready_ok", "data": {"elapsed_ms": 0, "shadow_ready": false, "shadow_cached": false}, "hypothesisId": "H5", "timestamp": 1781016988501}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_done","data":{"elapsed_ms":62,"ready_status":"ready"},"hypothesisId":"H5","timestamp":1781016988571}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781017018508}
+{"sessionId": "ec9625", "location": "backend.py:ready", "message": "ready_ok", "data": {"elapsed_ms": 0, "shadow_ready": false, "shadow_cached": false}, "hypothesisId": "H5", "timestamp": 1781017018530}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_done","data":{"elapsed_ms":74,"ready_status":"ready"},"hypothesisId":"H5","timestamp":1781017018582}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781017048510}
+{"sessionId": "ec9625", "location": "backend.py:ready", "message": "ready_ok", "data": {"elapsed_ms": 0, "shadow_ready": false, "shadow_cached": false}, "hypothesisId": "H5", "timestamp": 1781017048533}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_done","data":{"elapsed_ms":66,"ready_status":"ready"},"hypothesisId":"H5","timestamp":1781017048576}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781017078511}
+{"sessionId": "ec9625", "location": "backend.py:ready", "message": "ready_ok", "data": {"elapsed_ms": 0, "shadow_ready": false, "shadow_cached": false}, "hypothesisId": "H5", "timestamp": 1781017078554}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_done","data":{"elapsed_ms":68,"ready_status":"ready"},"hypothesisId":"H5","timestamp":1781017078579}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781017147516}
+{"sessionId": "ec9625", "location": "backend.py:ready", "message": "ready_ok", "data": {"elapsed_ms": 0, "shadow_ready": false, "shadow_cached": false}, "hypothesisId": "H5", "timestamp": 1781017147833}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_done","data":{"elapsed_ms":546,"ready_status":"ready"},"hypothesisId":"H5","timestamp":1781017148060}
+{"sessionId": "ec9625", "location": "backend.py:models_info", "message": "models_info_ok", "data": {"elapsed_ms": 1231}, "hypothesisId": "H3", "timestamp": 1781017186504}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781017205778}
+{"sessionId": "ec9625", "location": "backend.py:ready", "message": "ready_ok", "data": {"elapsed_ms": 0, "shadow_ready": false, "shadow_cached": false}, "hypothesisId": "H5", "timestamp": 1781017205979}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_done","data":{"elapsed_ms":341,"ready_status":"ready"},"hypothesisId":"H5","timestamp":1781017206119}
+{"sessionId": "ec9625", "location": "backend.py:models_compare", "message": "models_compare_ok", "data": {"elapsed_ms": 562}, "hypothesisId": "H3", "timestamp": 1781017208974}
+{"sessionId": "ec9625", "location": "backend.py:models_info", "message": "models_info_ok", "data": {"elapsed_ms": 956}, "hypothesisId": "H3", "timestamp": 1781017209381}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781017228426}
+{"sessionId": "ec9625", "location": "backend.py:ready", "message": "ready_ok", "data": {"elapsed_ms": 0, "shadow_ready": true, "shadow_cached": true}, "hypothesisId": "H5", "timestamp": 1781017228461}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_done","data":{"elapsed_ms":150,"ready_status":"ready"},"hypothesisId":"H5","timestamp":1781017228576}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781017258510}
+{"sessionId": "ec9625", "location": "backend.py:ready", "message": "ready_ok", "data": {"elapsed_ms": 0, "shadow_ready": true, "shadow_cached": true}, "hypothesisId": "H5", "timestamp": 1781017258529}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_done","data":{"elapsed_ms":62,"ready_status":"ready"},"hypothesisId":"H5","timestamp":1781017258572}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781017288515}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781017327516}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781017387513}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781017447501}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781017507513}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781017567576}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781017627510}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781017687763}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781017747520}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781017807511}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781017867514}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781017927513}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781017987518}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781018047517}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781018107507}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781018167511}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781018227517}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781018287530}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781018347512}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781018407515}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781018467511}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781018527520}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781023668936}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781023687695}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781023747518}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781023768531}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781023798583}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781023828513}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781023867506}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781023927531}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781023987513}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781024047516}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781024107515}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781024167516}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781024228460}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781024255413}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781024278517}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781024308514}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781024347505}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781024407556}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781024467714}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781024527527}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781024587530}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781024647599}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781024707527}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781024767627}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781024827536}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781024887557}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781024947507}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_done","data":{"elapsed_ms":156,"ready_status":"ready"},"hypothesisId":"H5","timestamp":1781024947663}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_start","data":{},"hypothesisId":"H5","timestamp":1781024969979}
+{"sessionId":"ec9625","location":"App.jsx:refreshSystem","message":"system_fetch_done","data":{"elapsed_ms":437,"ready_status":"ready"},"hypothesisId":"H5","timestamp":1781024970416}

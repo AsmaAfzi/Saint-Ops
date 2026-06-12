@@ -1,0 +1,47 @@
+# saint-dev namespace — local Docker Desktop K8s / minikube
+global:
+  namespace: saint-dev
+
+backend:
+  replicaCount: 2
+  image:
+    pullPolicy: Never
+  service:
+    type: ClusterIP
+  mlflow:
+    shadowTrafficPct: "10"
+
+frontend:
+  replicaCount: 1
+  image:
+    pullPolicy: Never
+  service:
+    type: ClusterIP
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 70
+  latency:
+    enabled: false
+
+persistence:
+  enabled: true
+  size: 10Gi
+  storageClass: ""
+
+ingress:
+  enabled: false
+
+cronJobs:
+  driftReport:
+    schedule: "0 8 * * *"
+  dataFreshness:
+    maxAgeHours: 336
+
+rbac:
+  enabled: true
+
+networkPolicy:
+  enabled: true

@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>SAINT-OPS Airflow</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      margin: 0;
+      background: #f5f5f5;
+    }
+    .box {
+      text-align: center;
+      padding: 2rem;
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <h1>Airflow</h1>
+    <p id="msg">Opening demo dashboard...</p>
+  </div>
+  <form id="login-form" method="post" action="/login/" style="display: none">
+    <input type="hidden" name="csrf_token" id="csrf_token" value="" />
+    <input type="hidden" name="username" value="admin" />
+    <input type="hidden" name="password" value="admin" />
+  </form>
+  <script>
+    (async () => {
+      try {
+        const loginPage = await fetch("/login/", { credentials: "same-origin" });
+        if (!loginPage.ok) {
+          throw new Error("Could not reach Airflow login page (HTTP " + loginPage.status + ")");
+        }
+        const html = await loginPage.text();
+        const match = html.match(/name="csrf_token"[^>]*value="([^"]+)"/);
+        if (!match) {
+          throw new Error("Could not read CSRF token from login page");
+        }
+        document.getElementById("csrf_token").value = match[1];
+        document.getElementById("login-form").submit();
+      } catch (err) {
+        document.getElementById("msg").textContent =
+          err.message + " Open /login/ manually with admin / admin.";
+      }
+    })();
+  </script>
+</body>
+</html>

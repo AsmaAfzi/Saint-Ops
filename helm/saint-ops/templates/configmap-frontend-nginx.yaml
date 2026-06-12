@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "saint-ops.fullname" . }}-frontend-nginx
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "saint-ops.labels" . | nindent 4 }}
+data:
+  default.conf: |
+    server {
+        listen 80;
+
+        location / {
+            root /usr/share/nginx/html;
+            index index.html;
+            try_files $uri $uri/ /index.html;
+        }
+
+        location /api/ {
+            proxy_pass http://{{ include "saint-ops.fullname" . }}-backend:{{ .Values.backend.service.port }}/;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_read_timeout 300s;
+        }
+    }

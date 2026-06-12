@@ -1,0 +1,9 @@
+mlflow==2.17.0
+protobuf>=5.28.0,<6.0dev
+tensorflow==2.20.0
+keras==3.13.1
+numpy==2.2.1
+pandas==2.2.3
+openpyxl==3.1.5
+scikit-learn==1.8.0
+joblib==1.4.2

@@ -1,0 +1,18 @@
+# Keep backend image build context small (context = repo root)
+.git
+.github
+frontend
+mlflow-data
+**/__pycache__
+**/*.pyc
+**/.env
+**/*.ipynb
+data/*.xlsx
+data/~$*
+ml/results
+ml/..ml
+
+# Runtime mounts — do not bake into image
+artifacts
+models
+data

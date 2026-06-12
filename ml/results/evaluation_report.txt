@@ -1,0 +1,108 @@
+SAINT Evaluation Report (v8 — Fixed Val_P99 Normalisation)
+============================================================
+
+KNOWN LIMITATION:
+Scenario B (single env sensor fault) vs full env drift: ambiguous
+due to autoencoder bleed-through. Conservative default: Env Drift.
+Windows where one env feature dominates CUSUM by > 2.5x labelled
+'Probable Sensor Fault: X' with inherent uncertainty.
+
+
+============================================================
+Scenario A_env_full: /opt/saint/data/scenario_A_env_full.csv
+============================================================
+                     precision    recall  f1-score   support
+
+           No Drift       1.00      0.45      0.62        22
+Environmental Drift       0.85      0.20      0.32       142
+       Sensor Drift       0.00      0.00      0.00         0
+
+           accuracy                           0.23       164
+          macro avg       0.62      0.22      0.32       164
+       weighted avg       0.87      0.23      0.36       164
+
+Confusion matrix ['No Drift', 'Environmental Drift', 'Sensor Drift']
+[[ 10   5   7]
+ [  0  28 114]
+ [  0   0   0]]
+
+Macro F1 (coarse): 0.3150
+
+Fine-grained breakdown:
+Probable Sensor Fault: Downhole Pressure Gauge        97
+Environmental Drift                                   33
+Probable Sensor Fault: Oil Flow Meter                 17
+No Drift                                              10
+Probable Sensor Fault: Downhole Temperature Sensor     7
+
+============================================================
+Scenario B_env_single: /opt/saint/data/scenario_B_env_single.csv
+============================================================
+                     precision    recall  f1-score   support
+
+           No Drift       1.00      0.23      0.38        60
+Environmental Drift       0.00      0.00      0.00         0
+       Sensor Drift       0.70      1.00      0.82       104
+
+           accuracy                           0.72       164
+          macro avg       0.57      0.41      0.40       164
+       weighted avg       0.81      0.72      0.66       164
+
+Confusion matrix ['No Drift', 'Environmental Drift', 'Sensor Drift']
+[[ 14   1  45]
+ [  0   0   0]
+ [  0   0 104]]
+
+Macro F1 (coarse): 0.4002
+
+Fine-grained breakdown:
+Probable Sensor Fault: Downhole Pressure Gauge    149
+No Drift                                           14
+Environmental Drift                                 1
+
+============================================================
+Scenario C_annulus: /opt/saint/data/scenario_C_annulus.csv
+============================================================
+                     precision    recall  f1-score   support
+
+           No Drift       1.00      0.11      0.19       104
+Environmental Drift       0.00      0.00      0.00         0
+       Sensor Drift       0.40      1.00      0.57        60
+
+           accuracy                           0.43       164
+          macro avg       0.47      0.37      0.26       164
+       weighted avg       0.78      0.43      0.33       164
+
+Confusion matrix ['No Drift', 'Environmental Drift', 'Sensor Drift']
+[[11  4 89]
+ [ 0  0  0]
+ [ 0  0 60]]
+
+Macro F1 (coarse): 0.2552
+
+Fine-grained breakdown:
+Probable Sensor Fault: Downhole Pressure Gauge    117
+Probable Sensor Fault: Oil Flow Meter              30
+No Drift                                           11
+Environmental Drift                                 4
+Sensor Fault: Annulus Pressure Gauge                2
+
+============================================================
+OVERALL
+============================================================
+Overall coarse accuracy : 0.4614
+False alarm rate        : 81.2%
+Detection rate          : 100.0%
+
+Fine-grained distribution:
+PREDICTED_LABEL_FINE
+Probable Sensor Fault: Downhole Pressure Gauge        363
+Probable Sensor Fault: Oil Flow Meter                  47
+Environmental Drift                                    38
+No Drift                                               35
+Probable Sensor Fault: Downhole Temperature Sensor      7
+Sensor Fault: Annulus Pressure Gauge                    2
+
+NOTE: 'Probable Sensor Fault' labels carry inherent uncertainty.
+Autoencoder bleed-through between correlated env features means
+single-feature env faults cannot be isolated with certainty.

@@ -1,0 +1,12 @@
+apiVersion: v2
+name: saint-ops
+description: SAINT-OPS — drift detection platform (FastAPI + React + MLflow)
+type: application
+version: 1.0.0
+appVersion: "1.2.0"
+keywords:
+  - mlops
+  - drift-detection
+  - mlflow
+maintainers:
+  - name: SAINT-OPS Team

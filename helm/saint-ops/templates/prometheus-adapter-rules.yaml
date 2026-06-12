@@ -1,0 +1,24 @@
+{{- if .Values.autoscaling.latency.enabled }}
+# Apply after installing prometheus-adapter:
+#   kubectl apply -f prometheus-adapter-rules.yaml -n custom-metrics
+# Maps saint_inference_latency_seconds histogram → pod metric for HPA.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "saint-ops.fullname" . }}-prometheus-adapter-rules
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "saint-ops.labels" . | nindent 4 }}
+data:
+  config.yaml: |
+    rules:
+      - seriesQuery: 'saint_inference_latency_seconds_bucket{namespace!="",pod!=""}'
+        resources:
+          overrides:
+            namespace: {resource: "namespace"}
+            pod: {resource: "pod"}
+        name:
+          matches: "^(.*)_seconds_bucket"
+          as: "${1}_seconds"
+        metricsQuery: 'histogram_quantile(0.99, sum(rate(<<.Series>>{<<.LabelMatchers>>}[2m])) by (le, <<.GroupBy>>))'
+{{- end }}

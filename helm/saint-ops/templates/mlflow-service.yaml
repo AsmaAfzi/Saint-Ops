@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "saint-ops.fullname" . }}-mlflow
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "saint-ops.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mlflow
+spec:
+  type: {{ .Values.mlflow.service.type }}
+  ports:
+    - port: {{ .Values.mlflow.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "saint-ops.mlflow.selectorLabels" . | nindent 4 }}

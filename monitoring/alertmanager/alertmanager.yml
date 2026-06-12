@@ -1,0 +1,16 @@
+global:
+  resolve_timeout: 1m
+
+route:
+  receiver: demo-log
+  group_by: [alertname, severity]
+  group_wait: 0s
+  group_interval: 15s
+  repeat_interval: 5m
+
+receivers:
+  # Zero-cost demo: alerts appear in Alertmanager UI (http://localhost:9093)
+  - name: demo-log
+    webhook_configs:
+      - url: http://backend:8000/ops/alerts/webhook
+        send_resolved: true

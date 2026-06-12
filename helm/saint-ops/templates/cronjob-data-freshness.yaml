@@ -1,0 +1,45 @@
+{{- if .Values.cronJobs.dataFreshness.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "saint-ops.fullname" . }}-data-freshness
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "saint-ops.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.cronJobs.dataFreshness.schedule | quote }}
+  successfulJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: freshness
+              image: python:3.11-slim
+              command:
+                - python
+                - /scripts/k8s_data_freshness.py
+              env:
+                - name: DATA_DIR
+                  value: /app/data
+                - name: MAX_AGE_HOURS
+                  value: {{ .Values.cronJobs.dataFreshness.maxAgeHours | quote }}
+              volumeMounts:
+                - name: scripts
+                  mountPath: /scripts
+                - name: data
+                  mountPath: /app/data
+                  subPath: data
+          volumes:
+            - name: scripts
+              configMap:
+                name: {{ include "saint-ops.fullname" . }}-cron-scripts
+            - name: data
+              {{- if .Values.persistence.enabled }}
+              persistentVolumeClaim:
+                claimName: {{ include "saint-ops.storage.volumeName" . }}
+              {{- else }}
+              emptyDir: {}
+              {{- end }}
+{{- end }}
