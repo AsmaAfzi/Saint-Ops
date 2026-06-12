@@ -1,0 +1,6 @@
+# MLflow client pinned to v2.17.0 to match ghcr.io/mlflow/mlflow:v2.17.0 server image.
+# Revisit when upgrading the MLflow stack to 3.8+.
+CVE-2025-15036
+CVE-2025-15379
+CVE-2026-0596
+CVE-2026-2635
