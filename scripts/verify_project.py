@@ -25,6 +25,11 @@ REQUIRED = [
     "ml/inference.py",
     "ml/mlflow_log.py",
     "backend/backend.py",
+    "monitoring/prometheus/prometheus.yml",
+    "monitoring/grafana/dashboards/saint-overview.json",
+    "airflow/dags/saint_retrain_dag.py",
+    "terraform/main.tf",
+    "tests/load/locustfile.py",
 ]
 
 
@@ -51,14 +56,19 @@ def main() -> int:
     print(f"\n  Features: {meta['all_features']}")
     print(f"  Training: {meta.get('training_version', 'unknown')}")
 
-    from inference import classify_windows, make_sequences  # noqa: E402
+    from inference import classify_windows, compute_val_p99, make_sequences  # noqa: E402
 
     import numpy as np
 
     rng = np.random.default_rng(0)
     err = rng.random((20, 5)) * 0.01
+    val_p99 = compute_val_p99(rng.random((10, 5)) * 0.01)
     labels, *_ = classify_windows(
-        err, meta["all_features"], meta["env_indices"], meta["sensor_index"]
+        err,
+        val_p99,
+        meta["all_features"],
+        meta["env_indices"],
+        meta["sensor_index"],
     )
     assert len(labels) == 20
     print(f"  Inference classify_windows: OK ({len(set(labels))} label types)")

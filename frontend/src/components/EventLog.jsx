@@ -1,3 +1,5 @@
+import { filterExplanation, formatTopFeatures } from "../utils/features";
+
 export default function EventLog({ logs, selectedTime, onSelect, topK, envFeatures, sensorFeatures }) {
   return (
     <section className="panel event-log">
@@ -21,21 +23,17 @@ export default function EventLog({ logs, selectedTime, onSelect, topK, envFeatur
               <tr>
                 <th>Datetime</th>
                 <th>Type</th>
+                <th>Fine label</th>
                 <th>Top contributing features</th>
               </tr>
             </thead>
             <tbody>
               {logs.map((log, idx) => {
-                const filtered = log.explanation.filter((exp) =>
-                  log.drift_type === "Sensor Drift"
-                    ? sensorFeatures.includes(exp.feature_name)
-                    : envFeatures.includes(exp.feature_name)
-                );
-                const topFeatures = filtered
-                  .sort((a, b) => b.error - a.error)
-                  .slice(0, topK)
-                  .map((f) => `${f.feature_name}: ${f.error.toFixed(4)}`)
-                  .join(" · ");
+                const filtered = filterExplanation(log.explanation, log.drift_type, {
+                  envFeatures,
+                  sensorFeatures,
+                });
+                const topFeatures = formatTopFeatures(filtered, topK);
 
                 const isSelected = selectedTime === log.time;
                 const typeClass =
@@ -51,6 +49,7 @@ export default function EventLog({ logs, selectedTime, onSelect, topK, envFeatur
                     <td>
                       <span className={typeClass}>{log.drift_type}</span>
                     </td>
+                    <td className="mono fine-label">{log.drift_type_fine ?? "—"}</td>
                     <td className="features-cell">{topFeatures}</td>
                   </tr>
                 );

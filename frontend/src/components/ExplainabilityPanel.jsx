@@ -17,6 +17,13 @@ export default function ExplainabilityPanel({ selectedLog, filteredExplanation }
   if (!selectedLog || !filteredExplanation.length) return null;
 
   const isSensor = selectedLog.drift_type === "Sensor Drift";
+  const chartValues = filteredExplanation.map((f) =>
+    f.norm_error != null ? f.norm_error : f.error
+  );
+  const chartYTitle =
+    filteredExplanation.some((f) => f.norm_error != null)
+      ? "Norm error (× val_p99)"
+      : "Reconstruction error";
 
   return (
     <section className="explain-grid">
@@ -24,7 +31,15 @@ export default function ExplainabilityPanel({ selectedLog, filteredExplanation }
         <div className="panel__header">
           <div>
             <h2>{isSensor ? "Sensor drift analysis" : "Environmental drift analysis"}</h2>
-            <p className="mono">{selectedLog.datetime}</p>
+            <p className="mono">
+              {selectedLog.datetime}
+              {selectedLog.drift_type_fine && (
+                <span className="fine-label"> · {selectedLog.drift_type_fine}</span>
+              )}
+              {selectedLog.classifier_version && (
+                <span className="fine-label"> · {selectedLog.classifier_version}</span>
+              )}
+            </p>
           </div>
         </div>
         <ul className="explain-list">
@@ -35,11 +50,15 @@ export default function ExplainabilityPanel({ selectedLog, filteredExplanation }
                 <span className="explain-error">{exp.error.toFixed(4)}</span>
               </div>
               <p className="explain-detail">
+                {exp.baseline != null && (
+                  <span>val_p99 ref {exp.baseline.toFixed(4)} · </span>
+                )}
+                {exp.norm_error != null && (
+                  <span>norm {exp.norm_error.toFixed(2)}x · </span>
+                )}
+                {exp.cusum != null && <span>CUSUM S+ {exp.cusum.toFixed(1)} · </span>}
                 {exp.threshold != null && (
                   <span>Threshold {exp.threshold.toFixed(4)} · </span>
-                )}
-                {exp.baseline != null && exp.threshold == null && (
-                  <span>Baseline {exp.baseline.toFixed(4)} · </span>
                 )}
                 {exp.reason}
               </p>
@@ -52,14 +71,14 @@ export default function ExplainabilityPanel({ selectedLog, filteredExplanation }
         <div className="panel__header">
           <div>
             <h2>Feature contribution</h2>
-            <p>Reconstruction error by sensor at selected timestep</p>
+            <p>{chartYTitle} by feature at selected timestep</p>
           </div>
         </div>
         <Plot
           data={[
             {
               x: filteredExplanation.map((f) => f.feature_name),
-              y: filteredExplanation.map((f) => f.error),
+              y: chartValues,
               type: "bar",
               marker: {
                 color: filteredExplanation.map((f) => f.error),
@@ -76,7 +95,7 @@ export default function ExplainabilityPanel({ selectedLog, filteredExplanation }
             ...CHART_THEME,
             height: 300,
             margin: { t: 8, b: 80, l: 48, r: 16 },
-            yaxis: { ...CHART_THEME.yaxis, title: { text: "Error" } },
+            yaxis: { ...CHART_THEME.yaxis, title: { text: chartYTitle } },
             autosize: true,
           }}
           config={{ displayModeBar: false, responsive: true }}

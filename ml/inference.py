@@ -1,5 +1,5 @@
 """
-Shared SAINT inference: LSTM reconstruction + rolling p99 CUSUM + dominance-ratio classification (v7).
+Shared SAINT inference: LSTM reconstruction + fixed val_p99 CUSUM + dominance-ratio classification (v8).
 Used by test_model.py (evaluation) and backend.py (stream precompute).
 """
 
@@ -15,11 +15,10 @@ import numpy as np
 import pandas as pd
 from tensorflow.keras.models import load_model
 
-# ── Detector / classifier parameters (v6) ─────────────────────────────────────
+# ── Detector / classifier parameters (v8) ─────────────────────────────────────
 
-CUSUM_K = 0.5
+CUSUM_K = 0.9
 CUSUM_H = 4.0
-ROLL_P99_WINDOW = 50
 MAX_NORMALIZED_ERROR = 5.0
 ROLL_Z_WINDOW = 7
 ROLL_Z_THRESH = 2.0
@@ -58,17 +57,18 @@ def recon_error_per_feature(x_true: np.ndarray, x_pred: np.ndarray) -> np.ndarra
     return np.mean(np.square(x_true - x_pred), axis=1)
 
 
-def rolling_p99_normalize(
-    errors_per_feat: np.ndarray, window: int, cap: float
-) -> tuple[np.ndarray, np.ndarray]:
-    """Normalise errors by rolling p99 per feature; cap at `cap` multiples of p99."""
-    df = pd.DataFrame(errors_per_feat)
-    roll_p99 = (
-        df.rolling(window, min_periods=10).quantile(0.99).fillna(df.quantile(0.99))
-    )
-    roll_p99_safe = roll_p99.clip(lower=1e-8)
-    normalized = (df / roll_p99_safe).clip(upper=cap)
-    return normalized.values, roll_p99.values
+def compute_val_p99(normal_pf: np.ndarray) -> np.ndarray:
+    """Fixed p99 per feature from validation-window reconstruction errors."""
+    return np.percentile(normal_pf, 99, axis=0)
+
+
+def fixed_p99_normalize(
+    errors_per_feat: np.ndarray, val_p99: np.ndarray, cap: float
+) -> np.ndarray:
+    """Normalise each feature's error by its fixed validation-window p99."""
+    val_p99_safe = np.where(val_p99 < 1e-8, 1e-8, val_p99)
+    normalized = errors_per_feat / val_p99_safe[np.newaxis, :]
+    return np.clip(normalized, 0, cap)
 
 
 def compute_cusum(
@@ -114,6 +114,7 @@ def persistence_filter_1d(flags: np.ndarray, persist: int) -> np.ndarray:
 
 def classify_windows(
     errors_per_feat: np.ndarray,
+    val_p99: np.ndarray,
     all_features: list[str],
     env_idxs: list[int],
     sensor_idx: int,
@@ -125,11 +126,8 @@ def classify_windows(
     np.ndarray,
     np.ndarray,
     np.ndarray,
-    np.ndarray,
 ]:
-    norm_errors, roll_p99 = rolling_p99_normalize(
-        errors_per_feat, ROLL_P99_WINDOW, MAX_NORMALIZED_ERROR
-    )
+    norm_errors = fixed_p99_normalize(errors_per_feat, val_p99, MAX_NORMALIZED_ERROR)
     cusum_raw, s_pos, _ = compute_cusum(norm_errors, CUSUM_K, CUSUM_H)
     roll_raw, roll_z = compute_rolling_z(errors_per_feat, ROLL_Z_WINDOW, ROLL_Z_THRESH)
 
@@ -155,9 +153,8 @@ def classify_windows(
         leader_local = int(np.argmax(env_s))
         leader_s = env_s[leader_local]
         others_mean = np.delete(env_s, leader_local).mean() + 1e-8
-        env_ratio = leader_s / others_mean
 
-        if env_ratio > ENV_DOMINANCE_THRESH and ann_s < max_env:
+        if leader_s / others_mean > ENV_DOMINANCE_THRESH and ann_s < max_env:
             feat_name = all_features[env_idxs[leader_local]]
             display = DISPLAY_NAMES.get(feat_name, feat_name)
             labels.append(f"Probable Sensor Fault: {display}")
@@ -173,7 +170,6 @@ def classify_windows(
         s_pos,
         roll_z,
         norm_errors,
-        roll_p99,
     )
 
 
@@ -274,7 +270,10 @@ def load_artifacts(
         "global_threshold": float(np.load(os.path.join(art_dir, "global_threshold.npy"))),
         "env_thresholds": np.load(os.path.join(art_dir, "env_thresholds.npy")),
         "sensor_threshold": float(np.load(os.path.join(art_dir, "sensor_threshold.npy"))),
-        "normal_pf": np.load(os.path.join(art_dir, "normal_errors_per_feature.npy")),
+        "normal_pf": (normal_pf := np.load(
+            os.path.join(art_dir, "normal_errors_per_feature.npy")
+        )),
+        "val_p99": compute_val_p99(normal_pf),
         "meta": meta,
     }
 
@@ -311,8 +310,10 @@ def build_stream_timeline(
     x_pred = bundle["model"].predict(x_seq, verbose=0)
     errors_per_feat = recon_error_per_feature(x_seq, x_pred)
 
-    fine_labels, _, _, _, _, _, _, _ = classify_windows(
+    val_p99 = bundle["val_p99"]
+    fine_labels, _, _, _, s_pos, _, norm_errors = classify_windows(
         errors_per_feat=errors_per_feat,
+        val_p99=val_p99,
         all_features=all_features,
         env_idxs=env_idxs,
         sensor_idx=sensor_idx,
@@ -323,6 +324,8 @@ def build_stream_timeline(
     pad = window_size - 1
 
     feature_error = np.full((t_rows, n_feat), np.nan, dtype=np.float64)
+    norm_error_timeline = np.full((t_rows, n_feat), np.nan, dtype=np.float64)
+    cusum_timeline = np.full((t_rows, n_feat), np.nan, dtype=np.float64)
     drift_type_fine = np.array(["No Drift"] * t_rows, dtype=object)
     drift_type = np.array(["No Drift"] * t_rows, dtype=object)
     predicted_drift = np.zeros(t_rows, dtype=bool)
@@ -330,6 +333,8 @@ def build_stream_timeline(
     for i, label in enumerate(fine_labels):
         t = pad + i
         feature_error[t] = errors_per_feat[i]
+        norm_error_timeline[t] = norm_errors[i]
+        cusum_timeline[t] = s_pos[i]
         drift_type_fine[t] = label
         coarse = coarsen_label(label)
         drift_type[t] = coarse
@@ -338,6 +343,9 @@ def build_stream_timeline(
     return {
         "df": df,
         "feature_error": feature_error,
+        "norm_errors": norm_error_timeline,
+        "cusum_s_pos": cusum_timeline,
+        "val_p99": val_p99,
         "predicted_drift": predicted_drift,
         "drift_type": drift_type,
         "drift_type_fine": drift_type_fine,
@@ -349,9 +357,98 @@ def build_stream_timeline(
         "global_threshold": bundle["global_threshold"],
         "window_size": window_size,
         "source": data_path,
-        "classifier_version": "v7_rolling_p99",
+        "classifier_version": "v8_fixed_val_p99",
+        "detector_config": {
+            "cusum_k": CUSUM_K,
+            "cusum_h": CUSUM_H,
+            "normalisation": "fixed_val_p99",
+            "max_normalized_error": MAX_NORMALIZED_ERROR,
+            "roll_z_window": ROLL_Z_WINDOW,
+            "roll_z_thresh": ROLL_Z_THRESH,
+            "persist": PERSIST,
+            "annulus_dominance_thresh": ANNULUS_DOMINANCE_THRESH,
+            "env_dominance_thresh": ENV_DOMINANCE_THRESH,
+        },
         "model_source": model_source,
         "mlflow_model_uri": uri,
         "registry_run_id": bundle.get("registry_run_id"),
         "registry_version_stage": uri.split("/")[-1] if uri.startswith("models:/") else None,
     }
+
+
+def build_drift_explanation(
+    *,
+    predicted_drift: bool,
+    row_err: np.ndarray,
+    norm_row: np.ndarray,
+    cusum_row: np.ndarray,
+    val_p99: np.ndarray,
+    coarse_type: str,
+    fine_type: str,
+    feature_names: list[str],
+    env_idxs: list[int],
+    sensor_idx: int,
+    sensor_threshold: float,
+) -> list[dict[str, Any]]:
+    """Feature-level explanations aligned with v8 fixed val_p99 + CUSUM detection."""
+    if not predicted_drift or np.isnan(row_err).any():
+        return []
+
+    explanation: list[dict[str, Any]] = []
+
+    def _entry(
+        feat_idx: int,
+        *,
+        reason: str,
+        threshold: float | None = None,
+    ) -> dict[str, Any]:
+        display = DISPLAY_NAMES.get(feature_names[feat_idx], feature_names[feat_idx])
+        entry: dict[str, Any] = {
+            "feature_name": feature_names[feat_idx],
+            "display_name": display,
+            "error": float(row_err[feat_idx]),
+            "baseline": float(val_p99[feat_idx]),
+            "norm_error": float(norm_row[feat_idx]) if not np.isnan(norm_row[feat_idx]) else None,
+            "cusum": float(cusum_row[feat_idx]) if not np.isnan(cusum_row[feat_idx]) else None,
+            "reason": reason,
+        }
+        if threshold is not None:
+            entry["threshold"] = float(threshold)
+        return entry
+
+    if coarse_type == "Sensor Drift":
+        for i in env_idxs:
+            explanation.append(
+                _entry(
+                    i,
+                    reason="Environmental context (stable during annulus sensor fault)",
+                )
+            )
+        explanation.append(
+            _entry(
+                sensor_idx,
+                reason=(
+                    f"Annulus CUSUM dominance (k={CUSUM_K}, h={CUSUM_H}); "
+                    f"fine label: {fine_type}"
+                ),
+                threshold=sensor_threshold,
+            )
+        )
+        return explanation
+
+    for i in env_idxs:
+        norm = norm_row[i]
+        cusum = cusum_row[i]
+        if fine_type.startswith("Probable Sensor Fault:"):
+            reason = (
+                f"Elevated env CUSUM — possible single-sensor fault "
+                f"(norm={norm:.2f}x val_p99, S+={cusum:.1f})"
+            )
+        else:
+            reason = (
+                f"Fixed val_p99 normalised error {norm:.2f}x "
+                f"(ref=1.0); CUSUM S+={cusum:.1f}"
+            )
+        explanation.append(_entry(i, reason=reason))
+
+    return explanation

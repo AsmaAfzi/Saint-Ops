@@ -6,8 +6,8 @@ export default function MetricCards({
   envAlert,
   isRunning,
 }) {
-  const sensorDrift = sensorAlert.includes("DRIFT");
-  const envDrift = envAlert.includes("DRIFT");
+  const sensorDrift = /drift/i.test(sensorAlert);
+  const envDrift = /drift/i.test(envAlert);
 
   const cards = [
     {

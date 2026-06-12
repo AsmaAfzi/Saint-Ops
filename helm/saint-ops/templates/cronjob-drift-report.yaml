@@ -1,0 +1,45 @@
+{{- if .Values.cronJobs.driftReport.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "saint-ops.fullname" . }}-drift-report
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "saint-ops.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.cronJobs.driftReport.schedule | quote }}
+  successfulJobsHistoryLimit: {{ .Values.cronJobs.driftReport.successfulJobsHistoryLimit }}
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: drift-report
+              image: python:3.11-slim
+              command:
+                - python
+                - /scripts/k8s_drift_report.py
+              env:
+                - name: SAINT_BACKEND_URL
+                  value: "http://{{ include "saint-ops.fullname" . }}-backend:{{ .Values.backend.service.port }}"
+                - name: REPORT_DIR
+                  value: /reports
+              volumeMounts:
+                - name: scripts
+                  mountPath: /scripts
+                - name: storage
+                  mountPath: /reports
+                  subPath: reports
+          volumes:
+            - name: scripts
+              configMap:
+                name: {{ include "saint-ops.fullname" . }}-cron-scripts
+            - name: storage
+              {{- if .Values.persistence.enabled }}
+              persistentVolumeClaim:
+                claimName: {{ include "saint-ops.storage.volumeName" . }}
+              {{- else }}
+              emptyDir: {}
+              {{- end }}
+{{- end }}

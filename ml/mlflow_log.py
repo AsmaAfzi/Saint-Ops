@@ -318,6 +318,7 @@ def log_evaluation_run(
         if run_id:
             with mlflow.start_run(run_id=run_id):
                 mlflow.set_tag("stage", "evaluation")
+                mlflow.set_tag("classifier", "fixed_val_p99_CUSUM_v8")
                 if metrics:
                     mlflow.log_metrics(metrics)
                 if os.path.isfile(report_path):
@@ -330,6 +331,7 @@ def log_evaluation_run(
             run_name = f"saint_eval_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
             with mlflow.start_run(run_name=run_name):
                 mlflow.set_tag("stage", "evaluation")
+                mlflow.set_tag("classifier", "fixed_val_p99_CUSUM_v8")
                 if metrics:
                     mlflow.log_metrics(metrics)
                 if os.path.isfile(report_path):
@@ -369,7 +371,7 @@ def log_full_snapshot(artifacts_dir: str, models_dir: str, results_dir: str) -> 
                 {
                     "model_type": "LSTM_Autoencoder",
                     "training": "v2_non_drift_val_thresholds",
-                    "classifier": "rolling_p99_CUSUM_v7",
+                    "classifier": "fixed_val_p99_CUSUM_v8",
                 }
             )
             if metrics:

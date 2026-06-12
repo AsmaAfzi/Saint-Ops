@@ -1,4 +1,4 @@
-export default function Header({ backendStatus, modelInfo }) {
+export default function Header({ backendStatus, modelInfo, servedVariant, mlflowModelUri }) {
   const isReady = backendStatus?.status === "ready";
 
   return (
@@ -39,6 +39,21 @@ export default function Header({ backendStatus, modelInfo }) {
         )}
         {modelInfo?.model_source && (
           <span className="meta-chip">Model: {modelInfo.model_source}</span>
+        )}
+        {(modelInfo?.classifier_version || modelInfo?.classifier) && (
+          <span className="meta-chip mono">
+            Classifier: {modelInfo.classifier_version ?? modelInfo.classifier}
+          </span>
+        )}
+        {servedVariant && (
+          <span className={`meta-chip meta-chip--variant meta-chip--${servedVariant}`}>
+            Serving: {servedVariant}
+          </span>
+        )}
+        {mlflowModelUri && (
+          <span className="meta-chip mono" title={mlflowModelUri}>
+            URI: {mlflowModelUri.length > 28 ? `${mlflowModelUri.slice(0, 28)}…` : mlflowModelUri}
+          </span>
         )}
       </div>
     </header>

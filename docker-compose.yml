@@ -19,11 +19,15 @@ services:
       MLFLOW_SHADOW_TRAFFIC_PCT: "0"
       MLFLOW_EXPERIMENT_NAME: SAINT-Drift-Detection
       MLFLOW_REQUIRE_APPROVAL: "0"
+      RETRAIN_TRIGGER_DIR: /tmp/saint-retrain
+      RETRAIN_ENV_DRIFT_WINDOWS: "50"
     volumes:
+      - retrain-triggers:/tmp/saint-retrain
       - ./artifacts:/app/artifacts
       - ./models:/app/models
       - ./data:/app/data
       - ./mlflow-data:/mlflow:ro
+      - ./ml/inference.py:/app/inference.py:ro
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 30s
@@ -113,6 +117,198 @@ services:
       - ./minio-data:/data
     networks:
       - saint-network
+
+  # Phase 5 — Monitoring (zero-cost local stack)
+  #   docker compose --profile monitoring up -d
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: saint-prometheus
+    profiles: [monitoring]
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.enable-lifecycle
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - saint-network
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: saint-grafana
+    profiles: [monitoring]
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/saint-overview.json
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+    networks:
+      - saint-network
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: saint-alertmanager
+    profiles: [monitoring]
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./monitoring/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+    networks:
+      - saint-network
+
+  # Phase 6 — Airflow retraining (LocalExecutor, no cloud cost)
+  #   docker compose --profile train build train    # once: downloads TensorFlow (~620MB)
+  #   docker compose --profile airflow up -d --build
+  airflow-db:
+    image: postgres:16-alpine
+    container_name: saint-airflow-db
+    profiles: [airflow]
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - airflow-db-data:/var/lib/postgresql/data
+    networks:
+      - saint-network
+
+  airflow-init:
+    build:
+      context: .
+      dockerfile: airflow/Dockerfile
+      args:
+        TRAIN_IMAGE: miniproj-train:latest
+    container_name: saint-airflow-init
+    profiles: [airflow]
+    depends_on:
+      - airflow-db
+    environment: &airflow-env
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-db/airflow
+      AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY:-PkJIlxDdgHG5NoX_HVXzTbqzi0yOJQlFEC1uSFefPZ0=}
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "false"
+      AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_WEBSERVER_SECRET_KEY:-saint_ops_demo_flask_secret}
+      AIRFLOW__WEBSERVER__WEB_SERVER_WORKER_TIMEOUT: "300"
+      AIRFLOW__WEBSERVER__WEB_SERVER_MASTER_TIMEOUT: "300"
+      AIRFLOW__WEBSERVER__WORKERS: "1"
+      AIRFLOW__FAB__ENABLE_PROXY_FIX: "true"
+      SAINT_REPO_ROOT: /opt/saint
+      SAINT_BACKEND_URL: http://backend:8000
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      RETRAIN_TRIGGER_DIR: /opt/saint-retrain
+      RETRAIN_MIN_F1: "0.25"
+      RETRAIN_SCHEDULE: ""
+      SAINT_MAX_EPOCHS: "10"
+      AIRFLOW__CORE__PARALLELISM: "2"
+    volumes: &airflow-volumes
+      - ./airflow/dags:/opt/airflow/dags
+      - ./data:/opt/saint/data
+      - ./models:/opt/saint/models
+      - ./artifacts:/opt/saint/artifacts
+      - ./ml:/opt/saint/ml
+      - retrain-triggers:/opt/saint-retrain
+    user: "0:0"
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        airflow db migrate
+        airflow users create --username admin --password admin --firstname SAINT --lastname OPS --role Admin --email admin@saint.local || true
+        mkdir -p /opt/saint-retrain && chmod 777 /opt/saint-retrain
+    networks:
+      - saint-network
+
+  airflow-webserver:
+    build:
+      context: .
+      dockerfile: airflow/Dockerfile
+      args:
+        TRAIN_IMAGE: miniproj-train:latest
+    container_name: saint-airflow
+    profiles: [airflow]
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+      mlflow:
+        condition: service_started
+      backend:
+        condition: service_started
+    environment:
+      <<: *airflow-env
+    volumes: *airflow-volumes
+    command:
+      - bash
+      - -c
+      - rm -f /opt/airflow/airflow-webserver.pid && exec airflow webserver
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 180s
+    networks:
+      - saint-network
+
+  # Demo UI on host :8081 — server-side auto-login, then reverse-proxy to Airflow.
+  airflow-ui:
+    build:
+      context: ./airflow
+      dockerfile: Dockerfile.ui-proxy
+    container_name: saint-airflow-ui
+    profiles: [airflow]
+    depends_on:
+      airflow-webserver:
+        condition: service_healthy
+    ports:
+      - "8081:8081"
+    environment:
+      AIRFLOW_UPSTREAM: http://airflow-webserver:8080
+      PUBLIC_BASE: http://localhost:8081
+    networks:
+      - saint-network
+
+  airflow-scheduler:
+    build:
+      context: .
+      dockerfile: airflow/Dockerfile
+      args:
+        TRAIN_IMAGE: miniproj-train:latest
+    container_name: saint-airflow-scheduler
+    profiles: [airflow]
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    environment:
+      <<: *airflow-env
+    volumes: *airflow-volumes
+    command: scheduler
+    restart: unless-stopped
+    networks:
+      - saint-network
+
+volumes:
+  airflow-db-data:
+  retrain-triggers:
 
 networks:
   saint-network:

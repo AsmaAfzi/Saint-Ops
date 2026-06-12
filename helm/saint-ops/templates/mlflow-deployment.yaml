@@ -1,0 +1,84 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "saint-ops.fullname" . }}-mlflow
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "saint-ops.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mlflow
+spec:
+  replicas: {{ .Values.mlflow.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "saint-ops.mlflow.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "saint-ops.mlflow.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "saint-ops.serviceAccountName" . }}
+      containers:
+        - name: mlflow
+          image: "{{ .Values.mlflow.image.repository }}:{{ .Values.mlflow.image.tag }}"
+          imagePullPolicy: {{ .Values.mlflow.image.pullPolicy }}
+          command: ["/bin/sh", "/entrypoint/entrypoint.sh"]
+          ports:
+            - name: http
+              containerPort: {{ .Values.mlflow.service.port }}
+          env:
+            - name: MLFLOW_ARTIFACT_ROOT
+              value: {{ .Values.mlflow.artifactRoot | quote }}
+            - name: MLFLOW_BACKEND_STORE_URI
+              value: {{ .Values.mlflow.backendStoreUri | quote }}
+            - name: AWS_DEFAULT_REGION
+              value: {{ .Values.mlflow.s3.region | quote }}
+            {{- if .Values.mlflow.s3.enabled }}
+            - name: MLFLOW_S3_ENDPOINT_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "saint-ops.fullname" . }}-secrets
+                  key: MLFLOW_S3_ENDPOINT_URL
+                  optional: true
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "saint-ops.fullname" . }}-secrets
+                  key: AWS_ACCESS_KEY_ID
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "saint-ops.fullname" . }}-secrets
+                  key: AWS_SECRET_ACCESS_KEY
+            {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 15
+          resources:
+            {{- toYaml .Values.mlflow.resources | nindent 12 }}
+          volumeMounts:
+            - name: entrypoint
+              mountPath: /entrypoint
+            {{- if .Values.persistence.enabled }}
+            - name: storage
+              mountPath: /mlflow
+              subPath: mlflow
+            {{- end }}
+      volumes:
+        - name: entrypoint
+          configMap:
+            name: {{ include "saint-ops.fullname" . }}-mlflow-entrypoint
+            defaultMode: 0755
+        {{- if .Values.persistence.enabled }}
+        - name: storage
+          persistentVolumeClaim:
+            claimName: {{ include "saint-ops.storage.volumeName" . }}
+        {{- end }}

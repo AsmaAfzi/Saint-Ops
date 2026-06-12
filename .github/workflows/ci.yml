@@ -77,3 +77,106 @@ jobs:
 
       - name: Confirm images pushed
         run: echo "✅ saint-backend and saint-frontend pushed to Docker Hub"
+
+  security-scan:
+    name: Trivy CVE Scan
+    runs-on: ubuntu-latest
+    needs: [test, lint]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build backend image for scan
+        run: docker build -t saint-backend:scan -f backend/Dockerfile .
+
+      - name: Build frontend image for scan
+        run: docker build -t saint-frontend:scan ./frontend
+
+      - name: Run Trivy (backend)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: saint-backend:scan
+          format: table
+          exit-code: "1"
+          severity: CRITICAL
+          ignore-unfixed: true
+
+      - name: Run Trivy (frontend)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: saint-frontend:scan
+          format: table
+          exit-code: "1"
+          severity: CRITICAL
+          ignore-unfixed: true
+
+  load-test:
+    name: Locust Smoke Load Test
+    runs-on: ubuntu-latest
+    needs: [test]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install backend + locust
+        run: |
+          pip install -r backend/requirements.txt locust==2.32.4
+
+      - name: Start backend and run locust headless
+        run: |
+          cd backend
+          uvicorn backend:app --host 127.0.0.1 --port 8000 &
+          sleep 8
+          cd ..
+          locust -f tests/load/locustfile.py --host http://127.0.0.1:8000 \
+            --headless -u 15 -r 5 -t 20s --only-summary \
+            --stop-timeout 10 || true
+
+  terraform-validate:
+    name: Terraform Validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+
+      - name: Terraform fmt + init + validate
+        run: |
+          cd terraform
+          terraform fmt -check
+          terraform init -backend=false
+          terraform validate
+
+  helm:
+    name: Helm Chart Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.4
+
+      - name: Helm lint (default + env values)
+        run: |
+          helm lint helm/saint-ops
+          helm lint helm/saint-ops -f helm/saint-ops/values-dev.yaml
+          helm lint helm/saint-ops -f helm/saint-ops/values-staging.yaml
+          helm lint helm/saint-ops -f helm/saint-ops/values-production.yaml
+
+      - name: Helm template validation
+        run: |
+          helm template saint-dev helm/saint-ops -f helm/saint-ops/values-dev.yaml > /tmp/saint-dev.yaml
+          helm template saint-staging helm/saint-ops -f helm/saint-ops/values-staging.yaml > /tmp/saint-staging.yaml
+          helm template saint-prod helm/saint-ops -f helm/saint-ops/values-production.yaml > /tmp/saint-prod.yaml
+          grep -q "kind: Deployment" /tmp/saint-dev.yaml
+          grep -q "HorizontalPodAutoscaler" /tmp/saint-prod.yaml
+          grep -q "kind: CronJob" /tmp/saint-dev.yaml
+          echo "✅ Helm templates render successfully"

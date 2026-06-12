@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: SAINT-OPS
+    orgId: 1
+    folder: SAINT-OPS
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /var/lib/grafana/dashboards

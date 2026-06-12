@@ -1,0 +1,12 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+RUN pip install --no-cache-dir flask==3.1.0 requests==2.32.3 gunicorn==23.0.0
+
+COPY demo_proxy.py .
+
+ENV AIRFLOW_UPSTREAM=http://airflow-webserver:8080
+ENV PUBLIC_BASE=http://localhost:8081
+
+EXPOSE 8081
+CMD ["gunicorn", "-b", "0.0.0.0:8081", "demo_proxy:app", "--timeout", "600", "--workers", "1"]

@@ -10,7 +10,8 @@ RUN adduser --disabled-password --gecos "" appuser
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Application code — single source of truth for inference stays in ml/
+# Detection logic lives in ml/inference.py (v8 fixed val_p99 + CUSUM).
+# docker-compose also bind-mounts ./ml/inference.py for live updates.
 COPY backend/backend.py .
 COPY ml/inference.py .
 COPY ml/registry.py .

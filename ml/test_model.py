@@ -1,11 +1,11 @@
 """
-SAINT — Evaluation Script (v7)
+SAINT — Evaluation Script (v8)
 ================================
 Input:
   models/lstm_autoencoder.keras
   artifacts/scaler.pkl
   artifacts/global_threshold.npy
-  artifacts/normal_errors_per_feature.npy   ← now from VALIDATION window
+  artifacts/normal_errors_per_feature.npy   ← validation window errors
   artifacts/feature_meta.json
   scenario_A_env_full.csv
   scenario_B_env_single.csv
@@ -16,41 +16,78 @@ Outputs:
   results/evaluation_report.txt
 
 ────────────────────────────────────────────────────────────
-CHANGE FROM v6
+CHANGES FROM v7 — TWO TARGETED FIXES
 ────────────────────────────────────────────────────────────
-The only change from v6 is the source of normal_errors_per_feature.
+Fix 1: Fixed val_p99 normalisation replaces rolling p99.
 
-In v6 (train_saint v1): normal_errors_per_feature came from the old
-'normal' window (WINDOW=='normal', 432 rows, Nov 2008 – Apr 2010).
-The threshold calibration was reasonable but the model itself was trained
-on 259 rows from 2008 only, so the model failed on 2010 test data.
+  v7 used rolling_p99_normalize() — each feature's error was divided by
+  a rolling p99 computed over the previous 50 windows of the TEST data.
+  Because the injected drift is a gradual ramp, the rolling p99 adapted
+  to the growing signal at nearly the same rate. The result: all features
+  ended up with norm_error ≈ 0.7-0.9 regardless of whether they were
+  injected. The denominator was chasing the numerator.
 
-In v7 (train_saint v2): the model is trained on 692 rows covering
-Feb 2008 – Apr 2010. normal_errors_per_feature now comes from the
-validation window (last 15% of training data, 104 rows, Dec 2009 – Apr
-2010). This is chronologically adjacent to the test window (Apr–Oct 2010).
-The CUSUM normalisation in evaluate_saint uses this as the reference,
-so it correctly represents "what normal reconstruction error looks like
-just before the test period."
+  v8 uses fixed_p99_normalize() — each feature's error is divided by
+  the p99 of that feature's reconstruction errors in the VALIDATION
+  WINDOW (Dec 2009–Apr 2010), loaded from normal_errors_per_feature.npy.
+  This gives a stable, pre-injection reference:
+    norm_error = 1.0 → feature is at its validation p99 boundary
+    norm_error > 1.0 → feature error is above its normal ceiling
+    norm_error < 1.0 → feature error is below its normal ceiling
 
-All detection and classification logic is identical to v6:
-  - Rolling p99 normalisation on reconstruction errors
-  - CUSUM (gradual drift) + rolling z-score (sudden faults)
-  - Dominance ratio classification with named fault labels
-  - Persistence filter
+  Non-injected features stay near norm_error ≈ 0.7-0.9 (same as before,
+  they are within their normal range). Injected features grow above 1.0
+  as drift accumulates. The difference is now fixed and detectable.
+
+Fix 2: CUSUM allowance k raised from 0.5 to 0.9.
+
+  The CUSUM allowance k defines what the detector "expects" as the
+  normal level. Every step, k is subtracted from the normalised error
+  before accumulation: S[i] = max(0, S[i-1] + norm_error[i] - k).
+
+  With k=0.5 and norm_error ≈ 0.8 (non-injected, within normal):
+    S[i] = max(0, S[i-1] + 0.8 - 0.5) = S[i-1] + 0.3
+    After 164 steps: S ≈ 49 — CUSUM grows continuously on CLEAN data.
+    All features accumulate large CUSUM regardless of injection.
+
+  With k=0.9 and norm_error ≈ 0.8 (non-injected, within normal):
+    S[i] = max(0, S[i-1] + 0.8 - 0.9) = max(0, S[i-1] - 0.1) → 0
+    CUSUM stays near zero on clean features. ✓
+
+  With k=0.9 and norm_error > 1.0 (injected, growing above val_p99):
+    S[i] = max(0, S[i-1] + 1.1 - 0.9) = S[i-1] + 0.2 → grows.
+    CUSUM accumulates only on features that consistently exceed val_p99. ✓
+
+  k=0.9 is set at the midpoint between expected normal (0.8) and
+  expected anomalous (1.0+). This is the standard SPC choice:
+  k = (mu_normal + mu_anomalous) / 2 = (0.8 + 1.0) / 2 = 0.9.
+
+  h=4.0 unchanged — alarm fires after 4 units accumulated above k.
+  With k=0.9 and clean data (norm_error=0.8): CUSUM trends to 0,
+  no alarm. With injected drift (norm_error>1.0 growing): alarm fires
+  within ~20-40 steps of the drift exceeding the val_p99 ceiling.
+
+Expected outcome after these two fixes:
+  Non-injected features: CUSUM ≈ 0-2 (stays near zero)
+  Injected features:     CUSUM ≈ 15-50 (grows persistently)
+  Dominance ratios:      5-30x (clearly exceeds thresholds of 2.0/2.5)
+  Scenario A: env features all dominate → Environmental Drift ✓
+  Scenario B: DH_PRESS dominates (slightly) → Probable Sensor Fault ✓
+  Scenario C: ANNULUS dominates clearly → Sensor Fault: Annulus ✓
 
 ────────────────────────────────────────────────────────────
 KNOWN LIMITATION (unchanged)
 ────────────────────────────────────────────────────────────
-Scenario B (single env sensor fault) vs full environmental drift:
-ambiguous due to autoencoder bleed-through. Conservative default is
-Environmental Drift. Windows where one feature strongly dominates
-CUSUM are labelled 'Probable Sensor Fault: X' with low confidence.
-See Audibert et al. (2020) for literature context.
+Scenario B (single env sensor fault) vs full env drift: ambiguous
+due to autoencoder bleed-through. DH_PRESS fault causes model to
+expect correlated features (WHP, DH_TEMP) to follow — they don't —
+so their reconstruction error also rises. DH_PRESS will have slightly
+higher CUSUM but the gap may not always exceed ENV_DOMINANCE_THRESH.
+Conservative default: Environmental Drift when ambiguous.
 
 Usage:
     python evaluate_saint.py
-    (After running inject_drift.py and train_saint.py)
+    (no retraining needed — only evaluate_saint.py changed)
 """
 
 import os
@@ -62,15 +99,35 @@ import joblib
 from tensorflow.keras.models import load_model
 from sklearn.metrics import classification_report, confusion_matrix, f1_score
 
+from inference import (
+    ANNULUS_DOMINANCE_THRESH,
+    COARSE_CLASS_ORDER,
+    CUSUM_H,
+    CUSUM_K,
+    DISPLAY_NAMES,
+    ENV_DOMINANCE_THRESH,
+    MAX_NORMALIZED_ERROR,
+    PERSIST,
+    ROLL_Z_THRESH,
+    ROLL_Z_WINDOW,
+    classify_windows,
+    coarsen_label,
+    compute_val_p99,
+    make_sequences,
+    recon_error_per_feature,
+    recon_error_per_window,
+)
+
 # ── CONFIG ────────────────────────────────────────────────────────────────────
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.dirname(BASE_DIR)
 RESULTS_DIR = os.path.join(BASE_DIR, "results")
 
 SCENARIO_FILES = {
-    "A_env_full": os.path.join(ROOT_DIR, "data/scenario_A_env_full.csv"),
-    "B_env_single": os.path.join(ROOT_DIR, "data/scenario_B_env_single.csv"),
-    "C_annulus": os.path.join(ROOT_DIR, "data/scenario_C_annulus.csv"),
+    "A_env_full":   os.path.join(ROOT_DIR, "data", "scenario_A_env_full.csv"),
+    "B_env_single": os.path.join(ROOT_DIR, "data", "scenario_B_env_single.csv"),
+    "C_annulus":    os.path.join(ROOT_DIR, "data", "scenario_C_annulus.csv"),
 }
 
 MODEL_PATH    = os.path.join(ROOT_DIR, "models",    "lstm_autoencoder.keras")
@@ -79,184 +136,17 @@ GLOBAL_THRESH = os.path.join(ROOT_DIR, "artifacts", "global_threshold.npy")
 NORMAL_PF     = os.path.join(ROOT_DIR, "artifacts", "normal_errors_per_feature.npy")
 FEATURE_META  = os.path.join(ROOT_DIR, "artifacts", "feature_meta.json")
 
-# ── DETECTOR PARAMETERS ───────────────────────────────────────────────────────
-
-CUSUM_K = 0.5
-CUSUM_H = 4.0
-
-ROLL_P99_WINDOW      = 50
-MAX_NORMALIZED_ERROR = 5.0
-
-ROLL_Z_WINDOW = 7
-ROLL_Z_THRESH = 2.0
-
-PERSIST = 3
-
-ANNULUS_DOMINANCE_THRESH = 2.0
-ENV_DOMINANCE_THRESH     = 2.5
-
-DISPLAY_NAMES = {
-    "AVG_DOWNHOLE_PRESSURE":    "Downhole Pressure Gauge",
-    "AVG_DOWNHOLE_TEMPERATURE": "Downhole Temperature Sensor",
-    "BORE_OIL_VOL":             "Oil Flow Meter",
-    "AVG_WHP_P":                "Wellhead Pressure Gauge",
-    "AVG_ANNULUS_PRESS":        "Annulus Pressure Gauge",
-}
-
-COARSE_CLASS_ORDER = ["No Drift", "Environmental Drift", "Sensor Drift"]
-
-def coarsen_label(label: str) -> str:
-    if label == "No Drift":
-        return "No Drift"
-    if label in ("Environmental Drift", "Probable Environmental Drift"):
-        return "Environmental Drift"
-    return "Sensor Drift"
-
-# ── UTILITIES ─────────────────────────────────────────────────────────────────
-
-def make_sequences(data: np.ndarray, window_size: int) -> np.ndarray:
-    return np.array([data[i:i+window_size]
-                     for i in range(len(data) - window_size + 1)])
-
-def recon_error_per_window(X_true, X_pred):
-    return np.mean(np.square(X_true - X_pred), axis=(1, 2))
-
-def recon_error_per_feature(X_true, X_pred):
-    return np.mean(np.square(X_true - X_pred), axis=1)
-
-
-def rolling_p99_normalize(errors_per_feat: np.ndarray,
-                           window: int, cap: float) -> tuple:
-    """
-    Normalise each feature's reconstruction error by its own rolling p99.
-    Achieves scale fairness across features: all values expressed as
-    multiples of their own recent 99th-percentile error.
-    Capped at `cap` to prevent extreme spikes from dominating CUSUM.
-    """
-    df       = pd.DataFrame(errors_per_feat)
-    roll_p99 = (df.rolling(window, min_periods=10)
-                  .quantile(0.99)
-                  .fillna(df.quantile(0.99)))
-    roll_p99_safe = roll_p99.clip(lower=1e-8)
-    normalized    = (df / roll_p99_safe).clip(upper=cap)
-    return normalized.values, roll_p99.values
-
-
-def compute_cusum(normalized_errors: np.ndarray,
-                  k: float, h: float) -> tuple:
-    """
-    CUSUM on rolling-p99-normalised errors.
-    Accumulates persistent upward deviations above k.
-    Alarm fires when S_pos exceeds h.
-    """
-    N, F  = normalized_errors.shape
-    S_pos = np.zeros((N, F))
-    S_neg = np.zeros((N, F))
-    for i in range(1, N):
-        S_pos[i] = np.maximum(0, S_pos[i-1] + normalized_errors[i] - k)
-        S_neg[i] = np.maximum(0, S_neg[i-1] - normalized_errors[i] - k)
-    return (S_pos > h) | (S_neg > h), S_pos, S_neg
-
-
-def compute_rolling_z(errors_per_feat: np.ndarray,
-                      window: int, z_thresh: float) -> tuple:
-    """Rolling z-score on raw errors. Secondary detector for sudden faults."""
-    df        = pd.DataFrame(errors_per_feat)
-    roll_mean = df.rolling(window, min_periods=3).mean()
-    roll_std  = df.rolling(window, min_periods=3).std().replace(0, 1e-8).fillna(1e-8)
-    z         = np.nan_to_num((df - roll_mean).div(roll_std).values, nan=0.0)
-    return z > z_thresh, z
-
-
-def persistence_filter_2d(flags: np.ndarray, persist: int) -> np.ndarray:
-    """Per-feature persistence: flag[i,f] accepted only if persist consecutive."""
-    N, F     = flags.shape
-    filtered = np.zeros_like(flags, dtype=bool)
-    for f in range(F):
-        for i in range(persist - 1, N):
-            if flags[i-persist+1:i+1, f].all():
-                filtered[i, f] = True
-    return filtered
-
-
-def persistence_filter_1d(flags: np.ndarray, persist: int) -> np.ndarray:
-    filtered = np.zeros_like(flags, dtype=bool)
-    for i in range(persist - 1, len(flags)):
-        if flags[i-persist+1:i+1].all():
-            filtered[i] = True
-    return filtered
-
-
-def classify_windows(errors_per_feat: np.ndarray,
-                     all_features: list,
-                     env_idxs: list,
-                     sensor_idx: int) -> tuple:
-    """
-    Full detection + classification pipeline:
-      1. Rolling p99 normalise + cap
-      2. CUSUM on normalised errors (gradual drift)
-      3. Rolling z-score on raw errors (sudden faults)
-      4. Union of detectors, persistence filter
-      5. Dominance ratio named fault classification
-    """
-    norm_errors, roll_p99 = rolling_p99_normalize(
-        errors_per_feat, ROLL_P99_WINDOW, MAX_NORMALIZED_ERROR)
-
-    cusum_raw, S_pos, S_neg = compute_cusum(norm_errors, CUSUM_K, CUSUM_H)
-    roll_raw, roll_z        = compute_rolling_z(
-        errors_per_feat, ROLL_Z_WINDOW, ROLL_Z_THRESH)
-
-    combined_raw      = cusum_raw | roll_raw
-    combined_filtered = persistence_filter_2d(combined_raw, PERSIST)
-    any_anomalous     = persistence_filter_1d(
-        combined_filtered.any(axis=1), PERSIST)
-
-    N, F   = errors_per_feat.shape
-    labels = []
-
-    for i in range(N):
-        if not any_anomalous[i]:
-            labels.append("No Drift")
-            continue
-
-        s       = S_pos[i]
-        ann_s   = s[sensor_idx]
-        env_s   = s[env_idxs]
-        max_env = env_s.max() + 1e-8
-
-        # Annulus dominance
-        if ann_s / max_env > ANNULUS_DOMINANCE_THRESH:
-            labels.append("Sensor Fault: Annulus Pressure Gauge")
-            continue
-
-        # Env feature dominance
-        leader_local = int(np.argmax(env_s))
-        leader_s     = env_s[leader_local]
-        others_mean  = np.delete(env_s, leader_local).mean() + 1e-8
-
-        if leader_s / others_mean > ENV_DOMINANCE_THRESH and ann_s < max_env:
-            feat    = all_features[env_idxs[leader_local]]
-            display = DISPLAY_NAMES.get(feat, feat)
-            labels.append(f"Probable Sensor Fault: {display}")
-            continue
-
-        labels.append("Environmental Drift")
-
-    return (labels, cusum_raw, roll_raw,
-            combined_filtered, S_pos, roll_z, norm_errors, roll_p99)
-
-
 # ── STEP 1: LOAD ──────────────────────────────────────────────────────────────
 
 print("=" * 60)
-print("SAINT — Evaluation (v7)")
+print("SAINT — Evaluation (v8 — Fixed Val_P99 Normalisation, k=0.9)")
 print("=" * 60)
 
 print("\n[1] Loading model and artifacts ...")
 model         = load_model(MODEL_PATH)
 scaler        = joblib.load(SCALER_PATH)
 global_thresh = float(np.load(GLOBAL_THRESH))
-normal_pf     = np.load(NORMAL_PF)   # from validation window (Dec 2009–Apr 2010)
+normal_pf     = np.load(NORMAL_PF)   # shape (94, 5) — validation window errors
 
 with open(FEATURE_META) as f:
     meta = json.load(f)
@@ -267,16 +157,21 @@ ENV_IDXS     = meta["env_indices"]
 SENSOR_IDX   = meta["sensor_index"]
 WINDOW_SIZE  = meta["window_size"]
 
+val_p99 = compute_val_p99(normal_pf)
+
 print(f"    Features ({len(ALL_FEATURES)}): {ALL_FEATURES}")
-print(f"    Validation errors shape: {normal_pf.shape}  "
-      f"(from Dec 2009–Apr 2010 validation window)")
+print(f"    Validation window errors: {normal_pf.shape}")
+print(f"    Fixed val_p99 per feature:")
+for i, feat in enumerate(ALL_FEATURES):
+    display = DISPLAY_NAMES.get(feat, feat)
+    print(f"      {display:<35} p99={val_p99[i]:.6f}")
 print(f"    Global threshold: {global_thresh:.6f}")
 print(f"\n    Detection parameters:")
-print(f"      CUSUM              k={CUSUM_K}, h={CUSUM_H}")
-print(f"      Rolling p99 window = {ROLL_P99_WINDOW}")
-print(f"      Error cap          = {MAX_NORMALIZED_ERROR}x p99")
+print(f"      CUSUM              k={CUSUM_K} (was 0.5), h={CUSUM_H}")
+print(f"      Normalisation      fixed val_p99 (was rolling p99)")
+print(f"      Error cap          {MAX_NORMALIZED_ERROR}x val_p99")
 print(f"      Rolling z          window={ROLL_Z_WINDOW}, thresh={ROLL_Z_THRESH}")
-print(f"      Persistence        = {PERSIST} windows")
+print(f"      Persistence        {PERSIST} windows")
 print(f"      Annulus dominance  > {ANNULUS_DOMINANCE_THRESH}x")
 print(f"      Env dominance      > {ENV_DOMINANCE_THRESH}x")
 
@@ -285,14 +180,13 @@ print(f"      Env dominance      > {ENV_DOMINANCE_THRESH}x")
 os.makedirs(RESULTS_DIR, exist_ok=True)
 all_predictions = []
 report_lines    = [
-    "SAINT Evaluation Report (v7)",
+    "SAINT Evaluation Report (v8 — Fixed Val_P99 Normalisation)",
     "=" * 60,
     "",
     "KNOWN LIMITATION:",
-    "Scenario B (single env sensor fault) is ambiguous vs full env drift",
-    "due to autoencoder bleed-through between correlated features.",
-    "Conservative default: Environmental Drift.",
-    "Windows where one feature dominates CUSUM by > 2.5x are labelled",
+    "Scenario B (single env sensor fault) vs full env drift: ambiguous",
+    "due to autoencoder bleed-through. Conservative default: Env Drift.",
+    "Windows where one env feature dominates CUSUM by > 2.5x labelled",
     "'Probable Sensor Fault: X' with inherent uncertainty.",
     "",
 ]
@@ -304,7 +198,8 @@ for scenario_name, scenario_file in SCENARIO_FILES.items():
     df_s     = pd.read_csv(scenario_file, parse_dates=["DATEPRD"])
     drift_df = df_s[df_s["WINDOW"] == "drift"].copy().reset_index(drop=True)
     print(f"  Drift window: {len(drift_df)} rows  "
-          f"({drift_df['DATEPRD'].min().date()} → {drift_df['DATEPRD'].max().date()})")
+          f"({drift_df['DATEPRD'].min().date()} → "
+          f"{drift_df['DATEPRD'].max().date()})")
 
     X_raw    = drift_df[ALL_FEATURES].values.astype(np.float32)
     X_scaled = scaler.transform(X_raw)
@@ -314,22 +209,25 @@ for scenario_name, scenario_file in SCENARIO_FILES.items():
     errors_global   = recon_error_per_window(X_seq, X_pred)
     errors_per_feat = recon_error_per_feature(X_seq, X_pred)
 
-    print(f"  Error range: [{errors_global.min():.4f}, {errors_global.max():.4f}]")
-    print(f"  Global threshold: {global_thresh:.4f}")
-    print(f"  Above threshold: {(errors_global > global_thresh).sum()} / {len(errors_global)}")
+    print(f"  Error range:      [{errors_global.min():.4f}, {errors_global.max():.4f}]")
+    print(f"  Global threshold:  {global_thresh:.4f}")
+    print(f"  Above threshold:   "
+          f"{(errors_global > global_thresh).sum()} / {len(errors_global)}")
 
     (fine_labels, cusum_flags, roll_flags,
-     combined, S_pos, roll_z,
-     norm_errors, roll_p99_vals) = classify_windows(
+     combined, S_pos, roll_z, norm_errors) = classify_windows(
         errors_per_feat = errors_per_feat,
+        val_p99         = val_p99,
         all_features    = ALL_FEATURES,
         env_idxs        = ENV_IDXS,
         sensor_idx      = SENSOR_IDX,
     )
 
     seq_start     = WINDOW_SIZE - 1
-    y_true_raw    = drift_df["TRUE_LABEL"].iloc[seq_start:].reset_index(drop=True).values
-    dates         = drift_df["DATEPRD"].iloc[seq_start:].reset_index(drop=True).values
+    y_true_raw    = (drift_df["TRUE_LABEL"]
+                     .iloc[seq_start:].reset_index(drop=True).values)
+    dates         = (drift_df["DATEPRD"]
+                     .iloc[seq_start:].reset_index(drop=True).values)
     y_pred_fine   = np.array(fine_labels)
     y_pred_coarse = np.array([coarsen_label(l) for l in y_pred_fine])
     y_true_coarse = np.array([coarsen_label(l) for l in y_true_raw])
@@ -352,18 +250,19 @@ for scenario_name, scenario_file in SCENARIO_FILES.items():
     for label, cnt in fine_counts.items():
         print(f"    {label:<55} {cnt:4d} ({cnt/len(y_pred_fine)*100:.1f}%)")
 
-    print(f"\n  CUSUM S+ per feature (mean | max):")
+    print(f"\n  CUSUM S+ per feature (mean | max)  [k={CUSUM_K}, h={CUSUM_H}]:")
     for i, feat in enumerate(ALL_FEATURES):
         group   = "[ENV]   " if i in ENV_IDXS else "[SENSOR]"
         display = DISPLAY_NAMES.get(feat, feat)
         print(f"    {group} {display:<35} "
               f"mean={S_pos[:,i].mean():7.2f}  max={S_pos[:,i].max():7.2f}")
 
-    print(f"\n  Normalised errors (mean | max):")
+    print(f"\n  Fixed-normalised errors (mean | max)  [ref=val_p99]:")
     for i, feat in enumerate(ALL_FEATURES):
         display = DISPLAY_NAMES.get(feat, feat)
         print(f"    {display:<35} "
-              f"mean={norm_errors[:,i].mean():.3f}  max={norm_errors[:,i].max():.3f}")
+              f"mean={norm_errors[:,i].mean():.3f}  max={norm_errors[:,i].max():.3f}  "
+              f"val_p99={val_p99[i]:.4f}")
 
     result_df = pd.DataFrame({
         "SCENARIO":               scenario_name,
@@ -432,7 +331,7 @@ for label, cnt in all_fine.items():
     print(f"  {label:<55} {cnt:5d} ({cnt/len(all_df)*100:.1f}%)")
 
 print(f"\nNOTE: 'Probable Sensor Fault' carries inherent uncertainty.")
-print(f"Prompts investigation by engineer, not automatic maintenance action.")
+print(f"Prompts engineer investigation, not automatic maintenance action.")
 
 # ── STEP 4: SAVE ──────────────────────────────────────────────────────────────
 
@@ -445,16 +344,28 @@ report_lines += [
     f"False alarm rate        : {fa_r*100:.1f}%",
     f"Detection rate          : {det_r*100:.1f}%",
     "\nFine-grained distribution:", all_fine.to_string(),
+    "\nNOTE: 'Probable Sensor Fault' labels carry inherent uncertainty.",
+    "Autoencoder bleed-through between correlated env features means",
+    "single-feature env faults cannot be isolated with certainty.",
 ]
 with open(os.path.join(RESULTS_DIR, "evaluation_report.txt"), "w") as f:
     f.write("\n".join(report_lines))
 
 print(f"\n[4] Results saved to '{RESULTS_DIR}/'")
-print(f"{'='*60}")
-print("Evaluation complete.")
-print(f"{'='*60}")
 
-# ── STEP 5: MLFLOW (automatic) ────────────────────────────────────────────────
+scenario_f1 = {}
+for sn in SCENARIO_FILES:
+    s = all_df[all_df["SCENARIO"] == sn]
+    scenario_f1[sn] = f1_score(
+        [coarsen_label(l) for l in s["TRUE_LABEL"]],
+        s["PREDICTED_LABEL_COARSE"],
+        labels=COARSE_CLASS_ORDER,
+        average="macro",
+        zero_division=0,
+    )
+macro_f1_overall = sum(scenario_f1.values()) / len(scenario_f1)
+
+# ── STEP 5: MLFLOW ────────────────────────────────────────────────────────────
 try:
     from mlflow_log import log_evaluation_run
 
@@ -466,7 +377,15 @@ try:
             "overall_coarse_accuracy": float(overall_acc),
             "false_alarm_rate": float(fa_r),
             "detection_rate": float(det_r),
+            "macro_f1_scenario_A": float(scenario_f1.get("A_env_full", 0.0)),
+            "macro_f1_scenario_B": float(scenario_f1.get("B_env_single", 0.0)),
+            "macro_f1_scenario_C": float(scenario_f1.get("C_annulus", 0.0)),
+            "macro_f1_overall": float(macro_f1_overall),
         },
     )
 except Exception as _mlflow_exc:
     print(f"[MLflow] {_mlflow_exc}")
+
+print(f"{'='*60}")
+print("Evaluation complete.")
+print(f"{'='*60}")

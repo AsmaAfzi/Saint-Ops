@@ -94,7 +94,7 @@ DROPOUT      = 0.2
 
 LEARNING_RATE    = 1e-3
 BATCH_SIZE       = 32     # larger batch now that we have 579 training sequences
-MAX_EPOCHS       = 200
+MAX_EPOCHS       = int(os.environ.get("SAINT_MAX_EPOCHS", "200"))
 PATIENCE         = 15
 LR_PATIENCE      = 7
 
@@ -291,7 +291,7 @@ feature_meta = {
     "sensor_index":    sensor_idx,
     "window_size":     WINDOW_SIZE,
     "training_version": "v2_non_drift_val_thresholds",
-    "classifier_version": "v7_rolling_p99",
+    "classifier_version": "v8_fixed_val_p99",
 }
 with open(os.path.join(ARTIFACT_DIR, "feature_meta.json"), "w") as f:
     json.dump(feature_meta, f, indent=2)
@@ -344,7 +344,7 @@ try:
         model=model,
         params={
             "training_version": "v2_non_drift_val_thresholds",
-            "classifier": "rolling_p99_CUSUM_v7",
+            "classifier": "fixed_val_p99_CUSUM_v8",
             "window_size": WINDOW_SIZE,
             "n_features": len(ALL_FEATURES),
             "lstm_units": LSTM_UNITS,

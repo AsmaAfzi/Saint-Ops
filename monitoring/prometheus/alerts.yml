@@ -1,0 +1,48 @@
+# Demo-tuned: short `for` + 1m rate windows so alerts show in Alertmanager quickly.
+# Restore longer values for staging/production.
+groups:
+  - name: saint_ops_api
+    rules:
+      - alert: SaintHighErrorRate
+        expr: |
+          sum(rate(saint_http_requests_total{status=~"5.."}[1m]))
+          / clamp_min(sum(rate(saint_http_requests_total[1m])), 0.001)
+          > 0.05
+        for: 15s
+        labels:
+          severity: critical
+        annotations:
+          summary: "SAINT API error rate above 5%"
+          description: "More than 5% of HTTP responses are 5xx over the last minute."
+
+      - alert: SaintHighInferenceLatency
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(saint_inference_latency_seconds_bucket[1m])) by (le, endpoint)
+          ) > 2
+        for: 15s
+        labels:
+          severity: warning
+        annotations:
+          summary: "SAINT inference p95 latency high"
+          description: "p95 inference latency exceeds 2s on {{ $labels.endpoint }}."
+
+  - name: saint_ops_ml
+    rules:
+      - alert: SaintDriftSpike
+        expr: rate(saint_drift_detections_total[1m]) > 0.05
+        for: 15s
+        labels:
+          severity: warning
+        annotations:
+          summary: "Elevated drift detection rate"
+          description: "Drift detections are firing frequently — review stream or consider retraining."
+
+      - alert: SaintConsecutiveEnvDrift
+        expr: saint_consecutive_env_drift_windows >= 10
+        for: 15s
+        labels:
+          severity: info
+        annotations:
+          summary: "Sustained environmental drift detected"
+          description: "{{ $value }} consecutive environmental drift windows — retraining candidate."

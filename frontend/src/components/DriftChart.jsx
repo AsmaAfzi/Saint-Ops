@@ -27,6 +27,8 @@ export default function DriftChart({
   markerColor,
   statusLabel,
   statusTone,
+  yAxisTitle = "Error",
+  seriesLabel = "Reconstruction error",
 }) {
   return (
     <article className="chart-card">
@@ -46,7 +48,7 @@ export default function DriftChart({
               y: yData,
               type: "scatter",
               mode: "lines",
-              name: "Reconstruction error",
+              name: seriesLabel,
               line: { color: lineColor, width: 2, shape: "spline" },
               fill: "tozeroy",
               fillcolor: `${lineColor}22`,
@@ -66,7 +68,7 @@ export default function DriftChart({
             margin: { t: 8, b: 40, l: 48, r: 16 },
             showlegend: false,
             xaxis: { ...CHART_THEME.xaxis, title: { text: "Timestep", standoff: 8 } },
-            yaxis: { ...CHART_THEME.yaxis, title: { text: "Error", standoff: 8 } },
+            yaxis: { ...CHART_THEME.yaxis, title: { text: yAxisTitle, standoff: 8 } },
             autosize: true,
           }}
           config={{ displayModeBar: false, responsive: true }}

@@ -1,0 +1,26 @@
+SAINT-OPS deployed to namespace {{ .Release.Namespace }}.
+
+1. Get frontend URL:
+{{- if contains "LoadBalancer" .Values.frontend.service.type }}
+  kubectl get svc {{ include "saint-ops.fullname" . }}-frontend -n {{ .Release.Namespace }}
+{{- else if .Values.ingress.enabled }}
+  https://{{ (index .Values.ingress.hosts 0).host }}
+{{- else }}
+  kubectl port-forward svc/{{ include "saint-ops.fullname" . }}-frontend 3000:{{ .Values.frontend.service.port }} -n {{ .Release.Namespace }}
+{{- end }}
+
+2. Get API URL:
+{{- if contains "LoadBalancer" .Values.backend.service.type }}
+  kubectl get svc {{ include "saint-ops.fullname" . }}-backend -n {{ .Release.Namespace }}
+{{- else }}
+  kubectl port-forward svc/{{ include "saint-ops.fullname" . }}-backend 8000:{{ .Values.backend.service.port }} -n {{ .Release.Namespace }}
+{{- end }}
+
+3. MLflow UI (internal):
+  kubectl port-forward svc/{{ include "saint-ops.fullname" . }}-mlflow 5000:{{ .Values.mlflow.service.port }} -n {{ .Release.Namespace }}
+
+4. Seed PVC data (first install):
+  ./scripts/k8s_seed_data.sh {{ .Release.Namespace }} {{ include "saint-ops.fullname" . }}
+
+5. HPA status:
+  kubectl get hpa -n {{ .Release.Namespace }}

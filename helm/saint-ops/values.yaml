@@ -1,0 +1,161 @@
+# Default values for saint-ops (override per environment)
+
+global:
+  namespace: saint-dev
+  imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+# ── Backend (FastAPI) ─────────────────────────────────────────────────────────
+backend:
+  replicaCount: 3
+  image:
+    repository: asmaafzi/saint-backend
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8000
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "2"
+      memory: 4Gi
+  probes:
+    startup:
+      initialDelaySeconds: 10
+      periodSeconds: 10
+      failureThreshold: 30
+    liveness:
+      periodSeconds: 30
+    readiness:
+      periodSeconds: 15
+  env: {}
+  # MLflow + registry (merged into ConfigMap)
+  mlflow:
+    trackingUri: ""  # default: http://<release>-mlflow:5000 (set in template)
+    registeredModel: SAINT
+    modelUri: models:/SAINT/Production
+    shadowModelUri: models:/SAINT/Staging
+    shadowTrafficPct: "0"
+    experimentName: SAINT-Drift-Detection
+    requireApproval: "0"
+    promotionMinF1Delta: "0.0"
+
+# ── Frontend (React / Nginx) ──────────────────────────────────────────────────
+frontend:
+  replicaCount: 2
+  image:
+    repository: asmaafzi/saint-frontend
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 80
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+# ── MLflow ────────────────────────────────────────────────────────────────────
+mlflow:
+  replicaCount: 1
+  image:
+    repository: ghcr.io/mlflow/mlflow
+    tag: v2.17.0
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 5000
+  artifactRoot: /mlflow/artifacts
+  backendStoreUri: sqlite:///mlflow/mlflow.db
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 2Gi
+  s3:
+    enabled: false
+    endpointUrl: ""
+    accessKey: ""
+    secretKey: ""
+    region: us-east-1
+
+# ── Persistence (EBS / Azure Disk via storageClass) ─────────────────────────
+persistence:
+  enabled: true
+  storageClass: ""
+  accessMode: ReadWriteOnce
+  size: 20Gi
+  # Subpaths on single PVC: data/, artifacts/, models/, mlflow/
+  mountMlflowOnBackend: true
+
+# ── Horizontal Pod Autoscaler (backend) ─────────────────────────────────────
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  # Requires prometheus-adapter (see templates/prometheus-adapter-rules.yaml)
+  latency:
+    enabled: false
+    metricName: saint_inference_latency_seconds
+    targetAverageValue: "2"
+
+# ── Ingress (optional) ────────────────────────────────────────────────────────
+ingress:
+  enabled: false
+  className: nginx
+  annotations: {}
+  hosts:
+    - host: saint.local
+      paths:
+        - path: /
+          pathType: Prefix
+          service: frontend
+        - path: /api
+          pathType: Prefix
+          service: backend
+  tls: []
+
+# ── CronJobs ──────────────────────────────────────────────────────────────────
+cronJobs:
+  driftReport:
+    enabled: true
+    schedule: "0 6 * * *"
+    successfulJobsHistoryLimit: 3
+  dataFreshness:
+    enabled: true
+    schedule: "0 */4 * * *"
+    maxAgeHours: 168
+
+# ── Secrets (set in values-* or --set-file) ─────────────────────────────────
+secrets:
+  create: true
+  # Override in production via external secret manager
+  awsAccessKeyId: ""
+  awsSecretAccessKey: ""
+
+# ── Service account ───────────────────────────────────────────────────────────
+serviceAccount:
+  create: true
+  name: ""
+
+# ── Pod disruption / affinity ─────────────────────────────────────────────────
+podAntiAffinity:
+  enabled: true
+
+# ── Phase 8 — RBAC + network policies (demo / production hardening) ─────────
+rbac:
+  enabled: true
+
+networkPolicy:
+  enabled: false  # enable on clusters with CNI support (kind, EKS, AKS)

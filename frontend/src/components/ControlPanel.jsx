@@ -1,4 +1,18 @@
-export default function ControlPanel({ run, speed, onToggleRun, onSpeedChange, onExport, onReset, canExport }) {
+export default function ControlPanel({
+  run,
+  speed,
+  chartMetric,
+  inferenceVariant,
+  shadowTrafficPct,
+  onToggleRun,
+  onSpeedChange,
+  onChartMetricChange,
+  onVariantChange,
+  onShadowTrafficChange,
+  onExport,
+  onReset,
+  canExport,
+}) {
   return (
     <section className="control-panel" aria-label="Playback controls">
       <button
@@ -32,6 +46,50 @@ export default function ControlPanel({ run, speed, onToggleRun, onSpeedChange, o
           onChange={(e) => onSpeedChange(parseFloat(e.target.value))}
         />
       </div>
+
+      <div className="variant-control">
+        <label htmlFor="chart-metric">Chart metric</label>
+        <select
+          id="chart-metric"
+          value={chartMetric}
+          onChange={(e) => onChartMetricChange(e.target.value)}
+        >
+          <option value="raw">Reconstruction error</option>
+          <option value="norm">Normalised (val_p99)</option>
+          <option value="cusum">CUSUM S+</option>
+        </select>
+      </div>
+
+      <div className="variant-control">
+        <label htmlFor="inference-variant">Inference variant</label>
+        <select
+          id="inference-variant"
+          value={inferenceVariant}
+          onChange={(e) => onVariantChange(e.target.value)}
+        >
+          <option value="auto">Auto (traffic split)</option>
+          <option value="production">Production only</option>
+          <option value="shadow">Shadow / staging only</option>
+        </select>
+      </div>
+
+      {inferenceVariant === "auto" && (
+        <div className="speed-control speed-control--narrow">
+          <label htmlFor="shadow-traffic">
+            Shadow traffic
+            <span className="speed-value">{shadowTrafficPct}%</span>
+          </label>
+          <input
+            id="shadow-traffic"
+            type="range"
+            min="0"
+            max="100"
+            step="5"
+            value={shadowTrafficPct}
+            onChange={(e) => onShadowTrafficChange(parseInt(e.target.value, 10))}
+          />
+        </div>
+      )}
 
       <div className="control-actions">
         <button type="button" className="btn btn--ghost" onClick={onReset}>
