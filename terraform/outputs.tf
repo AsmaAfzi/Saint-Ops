@@ -14,7 +14,7 @@ output "helm_release" {
 }
 
 output "demo_commands" {
-  value = <<-EOT
+  value       = <<-EOT
     kubectl config use-context ${var.kubeconfig_context}
     kubectl get pods -n ${var.namespace}
     kubectl apply -f scripts/k8s_seed_pod.yaml
