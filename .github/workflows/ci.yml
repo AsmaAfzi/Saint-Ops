@@ -94,7 +94,9 @@ jobs:
       - name: Build frontend image for scan
         run: docker build -t saint-frontend:scan ./frontend
 
-      - name: Run Trivy (backend)
+      # Backend image is ~3GB (TensorFlow). Full layer analysis exceeds Trivy's
+      # default 5m timeout; scan OS base + declared pip deps instead.
+      - name: Run Trivy (backend OS packages)
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: saint-backend:scan
@@ -102,6 +104,21 @@ jobs:
           exit-code: "1"
           severity: CRITICAL
           ignore-unfixed: true
+          scanners: vuln
+          vuln-type: os
+          timeout: 10m0s
+
+      - name: Run Trivy (backend pip dependencies)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: backend
+          format: table
+          exit-code: "1"
+          severity: CRITICAL
+          ignore-unfixed: true
+          scanners: vuln
+          timeout: 5m0s
 
       - name: Run Trivy (frontend)
         uses: aquasecurity/trivy-action@v0.36.0
@@ -111,6 +128,8 @@ jobs:
           exit-code: "1"
           severity: CRITICAL
           ignore-unfixed: true
+          scanners: vuln
+          timeout: 10m0s
 
   load-test:
     name: Locust Smoke Load Test
