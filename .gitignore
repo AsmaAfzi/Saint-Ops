@@ -12,8 +12,22 @@ __pycache__/
 # MLflow local data
 mlflow-data/
 
+# Terraform local state/cache
+**/.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+
+# Frontend build output/deps
+frontend/node_modules/
+frontend/dist/
+
 # OS / IDE
 .DS_Store
 Thumbs.db
 .idea/
 .vscode/
+
+# Cursor agent debug logs
+.cursor/debug-*.log

@@ -33,12 +33,21 @@ def _parse_eval_f1() -> float:
     if not os.path.isfile(report):
         return 0.0
     with open(report, encoding="utf-8") as f:
-        for line in f:
-            if "Macro F1" in line and ":" in line:
-                try:
-                    return float(line.split(":")[-1].strip())
-                except ValueError:
-                    continue
+        text = f.read()
+    for pattern in (
+        r"Sensor-pathway F1 \(Scen\. B\)\s*:\s*([\d.]+)",
+        r"Binary drift-presence F1\s*:\s*([\d.]+)",
+        r"Headline global F1 \(mean\)\s*:\s*([\d.]+)",
+        r"Macro F1 \(coarse\):\s*([\d.]+)",
+    ):
+        import re
+
+        m = re.search(pattern, text)
+        if m:
+            try:
+                return float(m.group(1))
+            except ValueError:
+                continue
     return 0.0
 
 

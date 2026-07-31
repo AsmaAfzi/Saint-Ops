@@ -14,95 +14,104 @@ Scenario A_env_full: /opt/saint/data/scenario_A_env_full.csv
                      precision    recall  f1-score   support
 
            No Drift       1.00      0.45      0.62        22
-Environmental Drift       0.85      0.20      0.32       142
+Environmental Drift       1.00      0.27      0.42       142
        Sensor Drift       0.00      0.00      0.00         0
 
-           accuracy                           0.23       164
-          macro avg       0.62      0.22      0.32       164
-       weighted avg       0.87      0.23      0.36       164
+           accuracy                           0.29       164
+          macro avg       0.67      0.24      0.35       164
+       weighted avg       1.00      0.29      0.45       164
 
 Confusion matrix ['No Drift', 'Environmental Drift', 'Sensor Drift']
-[[ 10   5   7]
- [  0  28 114]
+[[ 10   0  12]
+ [  0  38 104]
  [  0   0   0]]
 
-Macro F1 (coarse): 0.3150
+Macro F1 (coarse): 0.3491
 
 Fine-grained breakdown:
-Probable Sensor Fault: Downhole Pressure Gauge        97
-Environmental Drift                                   33
-Probable Sensor Fault: Oil Flow Meter                 17
-No Drift                                              10
-Probable Sensor Fault: Downhole Temperature Sensor     7
+Probable Sensor Fault: Oil Flow Meter    116
+Environmental Drift                       38
+No Drift                                  10
 
 ============================================================
 Scenario B_env_single: /opt/saint/data/scenario_B_env_single.csv
 ============================================================
                      precision    recall  f1-score   support
 
-           No Drift       1.00      0.23      0.38        60
+           No Drift       1.00      0.15      0.26        60
 Environmental Drift       0.00      0.00      0.00         0
-       Sensor Drift       0.70      1.00      0.82       104
+       Sensor Drift       0.67      1.00      0.80       104
 
-           accuracy                           0.72       164
-          macro avg       0.57      0.41      0.40       164
-       weighted avg       0.81      0.72      0.66       164
+           accuracy                           0.69       164
+          macro avg       0.56      0.38      0.35       164
+       weighted avg       0.79      0.69      0.60       164
 
 Confusion matrix ['No Drift', 'Environmental Drift', 'Sensor Drift']
-[[ 14   1  45]
+[[  9   0  51]
  [  0   0   0]
  [  0   0 104]]
 
-Macro F1 (coarse): 0.4002
+Macro F1 (coarse): 0.3547
 
 Fine-grained breakdown:
-Probable Sensor Fault: Downhole Pressure Gauge    149
-No Drift                                           14
-Environmental Drift                                 1
+Probable Sensor Fault: Downhole Pressure Gauge    115
+Probable Sensor Fault: Oil Flow Meter              40
+No Drift                                            9
 
 ============================================================
 Scenario C_annulus: /opt/saint/data/scenario_C_annulus.csv
 ============================================================
                      precision    recall  f1-score   support
 
-           No Drift       1.00      0.11      0.19       104
+           No Drift       1.00      0.09      0.16       104
 Environmental Drift       0.00      0.00      0.00         0
-       Sensor Drift       0.40      1.00      0.57        60
+       Sensor Drift       0.39      1.00      0.56        60
 
-           accuracy                           0.43       164
-          macro avg       0.47      0.37      0.26       164
-       weighted avg       0.78      0.43      0.33       164
+           accuracy                           0.42       164
+          macro avg       0.46      0.36      0.24       164
+       weighted avg       0.78      0.42      0.31       164
 
 Confusion matrix ['No Drift', 'Environmental Drift', 'Sensor Drift']
-[[11  4 89]
+[[ 9  0 95]
  [ 0  0  0]
  [ 0  0 60]]
 
-Macro F1 (coarse): 0.2552
+Macro F1 (coarse): 0.2391
 
 Fine-grained breakdown:
-Probable Sensor Fault: Downhole Pressure Gauge    117
-Probable Sensor Fault: Oil Flow Meter              30
-No Drift                                           11
-Environmental Drift                                 4
-Sensor Fault: Annulus Pressure Gauge                2
+Probable Sensor Fault: Oil Flow Meter    155
+No Drift                                   9
 
 ============================================================
 OVERALL
 ============================================================
-Overall coarse accuracy : 0.4614
-False alarm rate        : 81.2%
+Overall coarse accuracy : 0.4675
+False alarm rate        : 84.9%
 Detection rate          : 100.0%
 
 Fine-grained distribution:
 PREDICTED_LABEL_FINE
-Probable Sensor Fault: Downhole Pressure Gauge        363
-Probable Sensor Fault: Oil Flow Meter                  47
-Environmental Drift                                    38
-No Drift                                               35
-Probable Sensor Fault: Downhole Temperature Sensor      7
-Sensor Fault: Annulus Pressure Gauge                    2
+Probable Sensor Fault: Oil Flow Meter             311
+Probable Sensor Fault: Downhole Pressure Gauge    115
+Environmental Drift                                38
+No Drift                                           28
 
 NOTE: 'Probable Sensor Fault' labels carry inherent uncertainty.
 Autoencoder bleed-through between correlated env features means
 single-feature env faults cannot be isolated with certainty.
+
+============================================================
+HEADLINE METRICS (SAINT / FYP reporting protocol)
+============================================================
+Primary metrics for project reporting (mini-project protocol).
+Coarse 3-class macro-F1 above is supplementary disambiguation analysis.
+Binary drift-presence F1     : 0.7948
+Binary drift accuracy        : 0.6789
+Binary drift precision       : 0.6595
+Binary drift recall          : 1.0000
+Sensor-pathway F1 (Scen. B)  : 0.8031
+Environmental-pathway F1 (A) : 0.4222
+Headline primary F1 (B+S)    : 0.7989
+Headline global F1 (mean)    : 0.6734
+Validation-baseline FAR      : 10.1%
+Injected-window FAR          : 84.9%

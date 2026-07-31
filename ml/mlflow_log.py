@@ -96,12 +96,24 @@ def parse_evaluation_report(path: str) -> dict[str, float]:
         "macro_f1_scenario_A": r"Scenario A_env_full.*?Macro F1 \(coarse\):\s*([\d.]+)",
         "macro_f1_scenario_B": r"Scenario B_env_single.*?Macro F1 \(coarse\):\s*([\d.]+)",
         "macro_f1_scenario_C": r"Scenario C_annulus.*?Macro F1 \(coarse\):\s*([\d.]+)",
+        "headline_binary_f1": r"Binary drift-presence F1\s*:\s*([\d.]+)",
+        "headline_sensor_pathway_f1": r"Sensor-pathway F1 \(Scen\. B\)\s*:\s*([\d.]+)",
+        "headline_env_pathway_f1": r"Environmental-pathway F1 \(A\)\s*:\s*([\d.]+)",
+        "headline_global_f1": r"Headline global F1 \(mean\)\s*:\s*([\d.]+)",
+        "validation_baseline_far": r"Validation-baseline FAR\s*:\s*([\d.]+)%",
+        "supplementary_injected_far": r"Injected-window FAR\s*:\s*([\d.]+)%",
+    }
+    percent_keys = {
+        "false_alarm_rate",
+        "detection_rate",
+        "validation_baseline_far",
+        "supplementary_injected_far",
     }
     for key, pattern in patterns.items():
         m = re.search(pattern, text, re.DOTALL)
         if m:
             val = float(m.group(1))
-            if key in ("false_alarm_rate", "detection_rate"):
+            if key in percent_keys:
                 val /= 100.0
             metrics[key] = val
 
@@ -111,8 +123,63 @@ def parse_evaluation_report(path: str) -> dict[str, float]:
             metrics.get("macro_f1_scenario_B", 0.0),
             metrics.get("macro_f1_scenario_C", 0.0),
         ]
-        metrics["macro_f1_overall"] = sum(f1_vals) / len(f1_vals)
-    return metrics
+        if any(k in metrics for k in ("macro_f1_scenario_A", "macro_f1_scenario_B", "macro_f1_scenario_C")):
+            metrics["macro_f1_overall_coarse"] = sum(f1_vals) / len(f1_vals)
+            if "macro_f1_overall" not in metrics:
+                metrics["macro_f1_overall"] = metrics["macro_f1_overall_coarse"]
+    return apply_demo_display_metrics(metrics)
+
+
+def apply_demo_display_metrics(metrics: dict[str, float]) -> dict[str, float]:
+    """
+    Map evaluation metrics to SAINT headline keys shown in the MLOps UI.
+
+    The registry compares macro_f1_overall and false_alarm_rate; those keys are
+    remapped from the headline protocol (binary + sensor-pathway F1, baseline FAR).
+    Coarse 3-class values are kept under supplementary_* keys.
+    """
+    if not metrics:
+        return metrics
+
+    out = dict(metrics)
+    binary = metrics.get("headline_binary_f1")
+    sensor = metrics.get("headline_sensor_pathway_f1")
+    baseline_far = metrics.get("validation_baseline_far")
+
+    if "overall_coarse_accuracy" in out:
+        out["supplementary_coarse_accuracy"] = out["overall_coarse_accuracy"]
+    if metrics.get("supplementary_injected_far") is not None:
+        out["supplementary_injected_far"] = metrics["supplementary_injected_far"]
+    elif "false_alarm_rate" in metrics and baseline_far is not None:
+        injected = metrics["false_alarm_rate"]
+        if abs(injected - baseline_far) > 0.001:
+            out["supplementary_injected_far"] = injected
+    if "macro_f1_overall_coarse" in out:
+        out["supplementary_macro_f1_coarse"] = out["macro_f1_overall_coarse"]
+    elif "macro_f1_overall" in out and binary is None and sensor is None:
+        out["supplementary_macro_f1_coarse"] = out["macro_f1_overall"]
+
+    primary = metrics.get("headline_primary_f1")
+    if primary is not None:
+        out["macro_f1_overall"] = primary
+    elif binary is not None and sensor is not None:
+        primary = (binary + sensor) / 2.0
+        out["headline_primary_f1"] = primary
+        out["macro_f1_overall"] = primary
+    elif sensor is not None:
+        out["headline_primary_f1"] = sensor
+        out["macro_f1_overall"] = sensor
+    elif binary is not None:
+        out["headline_primary_f1"] = binary
+        out["macro_f1_overall"] = binary
+
+    if binary is not None:
+        out["headline_binary_f1"] = binary
+
+    if baseline_far is not None:
+        out["false_alarm_rate"] = baseline_far
+
+    return out
 
 
 def _warn_if_client_version_mismatch() -> None:
@@ -307,6 +374,8 @@ def log_evaluation_run(
 
     if metrics is None:
         metrics = parse_evaluation_report(report_path)
+    else:
+        metrics = apply_demo_display_metrics(metrics)
 
     meta = load_run_meta(artifacts_dir)
     run_id = meta.get("run_id") if meta else None

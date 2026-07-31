@@ -46,7 +46,7 @@ services:
       dockerfile: Dockerfile
     container_name: saint-frontend
     ports:
-      - "3000:80"
+      - "3200:80"
     depends_on:
       backend:
         condition: service_healthy
@@ -144,7 +144,7 @@ services:
     container_name: saint-grafana
     profiles: [monitoring]
     ports:
-      - "3001:3000"
+      - "3301:3000"
     environment:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: admin

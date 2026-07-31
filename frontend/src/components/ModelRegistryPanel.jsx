@@ -1,3 +1,10 @@
+const DEMO_METRIC_LABELS = {
+  macro_f1_overall: "Headline F1 (SAINT)",
+  headline_binary_f1: "Binary drift F1",
+  false_alarm_rate: "False alarm rate (baseline)",
+  detection_rate: "Detection rate",
+};
+
 export default function ModelRegistryPanel({
   modelsInfo,
   modelsCompare,
@@ -14,7 +21,11 @@ export default function ModelRegistryPanel({
   const gate = modelsCompare?.promotion_gate;
   const versions = modelsInfo?.versions ?? [];
 
-  const formatMetric = (v) => (v != null && !Number.isNaN(v) ? Number(v).toFixed(4) : "—");
+  const formatMetric = (key, v) => {
+    if (v == null || Number.isNaN(v)) return "—";
+    if (key === "false_alarm_rate") return `${(Number(v) * 100).toFixed(1)}%`;
+    return Number(v).toFixed(4);
+  };
 
   return (
     <section className="panel registry-panel">
@@ -96,8 +107,8 @@ export default function ModelRegistryPanel({
                   <th>Version</th>
                   <th>Stage</th>
                   <th>Status</th>
-                  <th>Macro F1</th>
-                  <th>Accuracy</th>
+                  <th>Headline F1</th>
+                  <th>Baseline FAR</th>
                   <th>Run ID</th>
                 </tr>
               </thead>
@@ -118,8 +129,8 @@ export default function ModelRegistryPanel({
                         </span>
                       </td>
                       <td>{v.status}</td>
-                      <td className="mono">{formatMetric(v.metrics?.macro_f1_overall)}</td>
-                      <td className="mono">{formatMetric(v.metrics?.overall_coarse_accuracy)}</td>
+                      <td className="mono">{formatMetric("macro_f1_overall", v.metrics?.macro_f1_overall)}</td>
+                      <td className="mono">{formatMetric("false_alarm_rate", v.metrics?.false_alarm_rate)}</td>
                       <td className="mono truncate">{v.run_id?.slice(0, 12)}…</td>
                     </tr>
                   ))
@@ -134,7 +145,7 @@ export default function ModelRegistryPanel({
 }
 
 function CompareCard({ title, version, metrics, formatMetric }) {
-  const keys = ["macro_f1_overall", "overall_coarse_accuracy", "false_alarm_rate", "detection_rate"];
+  const keys = ["macro_f1_overall", "headline_binary_f1", "false_alarm_rate", "detection_rate"];
 
   return (
     <article className="compare-card">
@@ -149,8 +160,8 @@ function CompareCard({ title, version, metrics, formatMetric }) {
       <dl className="metric-dl">
         {keys.map((k) => (
           <div key={k}>
-            <dt>{k.replace(/_/g, " ")}</dt>
-            <dd className="mono">{formatMetric(metrics?.[k])}</dd>
+            <dt>{DEMO_METRIC_LABELS[k] ?? k.replace(/_/g, " ")}</dt>
+            <dd className="mono">{formatMetric(k, metrics?.[k])}</dd>
           </div>
         ))}
       </dl>

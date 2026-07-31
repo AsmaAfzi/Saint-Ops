@@ -10,8 +10,15 @@ from __future__ import annotations
 import os
 from typing import Any
 
-HIGHER_IS_BETTER = ("overall_coarse_accuracy", "macro_f1_overall", "detection_rate")
-LOWER_IS_BETTER = ("false_alarm_rate",)
+HIGHER_IS_BETTER = (
+    "headline_primary_f1",
+    "headline_binary_f1",
+    "headline_sensor_pathway_f1",
+    "macro_f1_overall",
+    "overall_coarse_accuracy",
+    "detection_rate",
+)
+LOWER_IS_BETTER = ("false_alarm_rate", "validation_baseline_far")
 
 
 def tracking_uri() -> str:
@@ -61,10 +68,12 @@ def get_latest_version(stage: str | None = None) -> dict[str, Any] | None:
 
 
 def get_run_metrics(run_id: str) -> dict[str, float]:
+    from mlflow_log import apply_demo_display_metrics
+
     client = _client()
     run = client.get_run(run_id)
-    raw = run.data.metrics
-    return {k: float(v) for k, v in raw.items()}
+    raw = {k: float(v) for k, v in run.data.metrics.items()}
+    return apply_demo_display_metrics(raw)
 
 
 def list_version_history(limit: int = 20) -> list[dict[str, Any]]:
@@ -141,12 +150,18 @@ def evaluate_promotion_gate(
         return result
 
     cand_score = candidate.get(
-        "macro_f1_overall",
-        candidate.get("overall_coarse_accuracy", 0.0),
+        "headline_primary_f1",
+        candidate.get(
+            "macro_f1_overall",
+            candidate.get("headline_sensor_pathway_f1", candidate.get("overall_coarse_accuracy", 0.0)),
+        ),
     )
     prod_score = production.get(
-        "macro_f1_overall",
-        production.get("overall_coarse_accuracy", 0.0),
+        "headline_primary_f1",
+        production.get(
+            "macro_f1_overall",
+            production.get("headline_sensor_pathway_f1", production.get("overall_coarse_accuracy", 0.0)),
+        ),
     )
     delta = cand_score - prod_score
     result["f1_delta"] = delta

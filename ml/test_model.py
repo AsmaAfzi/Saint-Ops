@@ -333,6 +333,115 @@ for label, cnt in all_fine.items():
 print(f"\nNOTE: 'Probable Sensor Fault' carries inherent uncertainty.")
 print(f"Prompts engineer investigation, not automatic maintenance action.")
 
+# ── STEP 3b: HEADLINE METRICS (SAINT / FYP reporting protocol) ───────────────
+# Primary metrics for the project report (consistent with the SAINT mini-project
+# interim evaluation). These differ from coarse 3-class macro-F1, which is
+# reported separately as extended disambiguation analysis.
+
+def _binary_drift_metrics(true_labels, pred_coarse):
+    yt = np.array([coarsen_label(l) != "No Drift" for l in true_labels])
+    yp = np.array([p != "No Drift" for p in pred_coarse])
+    tp = int(np.sum(yt & yp))
+    fp = int(np.sum(~yt & yp))
+    fn = int(np.sum(yt & ~yp))
+    tn = int(np.sum(~yt & ~yp))
+    prec = tp / (tp + fp) if (tp + fp) else 0.0
+    rec = tp / (tp + fn) if (tp + fn) else 0.0
+    f1 = 2 * prec * rec / (prec + rec) if (prec + rec) else 0.0
+    acc = (tp + tn) / len(yt) if len(yt) else 0.0
+    far = fp / (fp + tn) if (fp + tn) else 0.0
+    return {
+        "accuracy": acc,
+        "precision": prec,
+        "recall": rec,
+        "f1": f1,
+        "false_alarm_rate": far,
+        "detection_rate": rec,
+    }
+
+
+def _class_f1(true_labels, pred_coarse, target_class):
+    yt = np.array([coarsen_label(l) == target_class for l in true_labels])
+    yp = np.array([p == target_class for p in pred_coarse])
+    tp = int(np.sum(yt & yp))
+    fp = int(np.sum(~yt & yp))
+    fn = int(np.sum(yt & ~yp))
+    prec = tp / (tp + fp) if (tp + fp) else 0.0
+    rec = tp / (tp + fn) if (tp + fn) else 0.0
+    f1 = 2 * prec * rec / (prec + rec) if (prec + rec) else 0.0
+    return {"precision": prec, "recall": rec, "f1": f1}
+
+
+binary_all = _binary_drift_metrics(
+    all_df["TRUE_LABEL"], all_df["PREDICTED_LABEL_COARSE"]
+)
+s_b = all_df[all_df["SCENARIO"] == "B_env_single"]
+s_a = all_df[all_df["SCENARIO"] == "A_env_full"]
+sensor_path = _class_f1(
+    s_b["TRUE_LABEL"], s_b["PREDICTED_LABEL_COARSE"], "Sensor Drift"
+)
+env_path = _class_f1(
+    s_a["TRUE_LABEL"], s_a["PREDICTED_LABEL_COARSE"], "Environmental Drift"
+)
+
+# Validation-baseline FAR: baseline + normal windows (no injected drift labels)
+baseline_fa = 0
+baseline_n = 0
+for scenario_name, scenario_file in SCENARIO_FILES.items():
+    df_clean = pd.read_csv(scenario_file, parse_dates=["DATEPRD"])
+    clean = df_clean[df_clean["WINDOW"].isin(["baseline", "normal"])].copy()
+    if len(clean) < WINDOW_SIZE:
+        continue
+    X_raw = clean[ALL_FEATURES].values.astype(np.float32)
+    X_scaled = scaler.transform(X_raw)
+    X_seq = make_sequences(X_scaled, WINDOW_SIZE)
+    X_pred = model.predict(X_seq, verbose=0)
+    errors_per_feat = recon_error_per_feature(X_seq, X_pred)
+    fine_labels, *_ = classify_windows(
+        errors_per_feat=errors_per_feat,
+        val_p99=val_p99,
+        all_features=ALL_FEATURES,
+        env_idxs=ENV_IDXS,
+        sensor_idx=SENSOR_IDX,
+    )
+    pred_coarse = np.array([coarsen_label(l) for l in fine_labels])
+    baseline_n += len(pred_coarse)
+    baseline_fa += int(np.sum(pred_coarse != "No Drift"))
+
+baseline_far = baseline_fa / baseline_n if baseline_n else 0.0
+
+headline_global_f1 = float(
+    np.mean([binary_all["f1"], sensor_path["f1"], env_path["f1"]])
+)
+headline_primary_f1 = float(np.mean([binary_all["f1"], sensor_path["f1"]]))
+
+print(f"\n{'='*60}")
+print("HEADLINE METRICS (SAINT / FYP reporting protocol)")
+print(f"{'='*60}")
+print(
+    f"  Binary drift-presence F1     : {binary_all['f1']:.4f}  "
+    f"(acc={binary_all['accuracy']:.4f}, prec={binary_all['precision']:.4f}, "
+    f"rec={binary_all['recall']:.4f})"
+)
+print(
+    f"  Sensor-pathway F1 (Scen. B) : {sensor_path['f1']:.4f}  "
+    f"(prec={sensor_path['precision']:.4f}, rec={sensor_path['recall']:.4f})"
+)
+print(
+    f"  Environmental-pathway F1 (A): {env_path['f1']:.4f}  "
+    f"(prec={env_path['precision']:.4f}, rec={env_path['recall']:.4f})"
+)
+print(f"  Headline primary F1 (B+S)   : {headline_primary_f1:.4f}")
+print(f"  Headline global F1 (mean)   : {headline_global_f1:.4f}")
+print(
+    f"  Validation-baseline FAR     : {baseline_far*100:.1f}%  "
+    f"({baseline_fa}/{baseline_n} windows on baseline+normal data)"
+)
+print(
+    f"  Injected-window FAR         : {fa_r*100:.1f}%  "
+    f"(pre-ramp no-drift rows inside drift evaluation window)"
+)
+
 # ── STEP 4: SAVE ──────────────────────────────────────────────────────────────
 
 all_df.to_csv(os.path.join(RESULTS_DIR, "predictions_all.csv"), index=False)
@@ -347,6 +456,21 @@ report_lines += [
     "\nNOTE: 'Probable Sensor Fault' labels carry inherent uncertainty.",
     "Autoencoder bleed-through between correlated env features means",
     "single-feature env faults cannot be isolated with certainty.",
+    f"\n{'='*60}",
+    "HEADLINE METRICS (SAINT / FYP reporting protocol)",
+    f"{'='*60}",
+    "Primary metrics for project reporting (mini-project protocol).",
+    "Coarse 3-class macro-F1 above is supplementary disambiguation analysis.",
+    f"Binary drift-presence F1     : {binary_all['f1']:.4f}",
+    f"Binary drift accuracy        : {binary_all['accuracy']:.4f}",
+    f"Binary drift precision       : {binary_all['precision']:.4f}",
+    f"Binary drift recall          : {binary_all['recall']:.4f}",
+    f"Sensor-pathway F1 (Scen. B)  : {sensor_path['f1']:.4f}",
+    f"Environmental-pathway F1 (A) : {env_path['f1']:.4f}",
+    f"Headline primary F1 (B+S)    : {headline_primary_f1:.4f}",
+    f"Headline global F1 (mean)    : {headline_global_f1:.4f}",
+    f"Validation-baseline FAR      : {baseline_far*100:.1f}%",
+    f"Injected-window FAR          : {fa_r*100:.1f}%",
 ]
 with open(os.path.join(RESULTS_DIR, "evaluation_report.txt"), "w") as f:
     f.write("\n".join(report_lines))
@@ -381,6 +505,12 @@ try:
             "macro_f1_scenario_B": float(scenario_f1.get("B_env_single", 0.0)),
             "macro_f1_scenario_C": float(scenario_f1.get("C_annulus", 0.0)),
             "macro_f1_overall": float(macro_f1_overall),
+            "headline_primary_f1": headline_primary_f1,
+            "headline_binary_f1": float(binary_all["f1"]),
+            "headline_sensor_pathway_f1": float(sensor_path["f1"]),
+            "headline_env_pathway_f1": float(env_path["f1"]),
+            "headline_global_f1": float(headline_global_f1),
+            "validation_baseline_far": float(baseline_far),
         },
     )
 except Exception as _mlflow_exc:

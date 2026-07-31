@@ -37,7 +37,7 @@ SAINT (Semantic AI for Predictive Maintenance) achieved **~84% F1-score** detect
                     │                         │                         │
                     ▼                         ▼                         ▼
            ┌────────────────┐        ┌────────────────┐       ┌─────────────────┐
-           │ Frontend :3000 │        │ Grafana :3001  │       │ Airflow UI :8081│
+           │ Frontend :3200 │        │ Grafana :3301  │       │ Airflow UI :8081│
            │ React + Nginx  │        │ (monitoring)   │       │ (airflow prof.) │
            └───────┬────────┘        └───────┬────────┘       └────────┬────────┘
                    │ /api/* proxy            │ scrape                  │ DAGs
@@ -132,7 +132,7 @@ docker compose up --build
 
 | Service | URL | Notes |
 |---------|-----|-------|
-| Live drift dashboard | http://localhost:3000 | React UI — **Drift monitor** + **MLOps & system** tabs |
+| Live drift dashboard | http://localhost:3200 | React UI — **Drift monitor** + **MLOps & system** tabs |
 | API + Swagger | http://localhost:8000/docs | FastAPI OpenAPI |
 | Health / readiness | http://localhost:8000/health · /ready | Used by Docker healthcheck |
 | MLflow registry | http://localhost:5000 | Model versions and artifacts |
@@ -155,12 +155,14 @@ docker compose --profile monitoring --profile airflow up -d --build
 
 | Service | URL | Credentials / notes |
 |---------|-----|---------------------|
-| Grafana | http://localhost:3001 | Anonymous admin (demo) |
+| Grafana | http://localhost:3301 | Anonymous admin (demo) |
 | Prometheus | http://localhost:9090 | Scrapes `/metrics` on backend |
 | Alertmanager | http://localhost:9093 | Routes alert webhooks |
 | Airflow UI | http://localhost:8081 | Auto-login demo proxy — **not** port 8080 |
 
 Airflow first start can take **2–5 minutes**. If the UI fails, run `.\scripts\start_airflow.ps1` to reset the Airflow DB volume.
+
+**Demo narration:** see [`docs/DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md) for a full word-for-word viva script and port reference.
 
 **Optional profiles:**
 
@@ -284,10 +286,14 @@ Interactive docs: http://localhost:8000/docs
 
 ## ML model (mini project baseline)
 
+Evaluation uses the **SAINT headline protocol** (binary drift detection + sensor/environmental pathway F1 on injected scenarios). Coarse 3-class cause-attribution is reported separately in `ml/results/evaluation_report.txt`.
+
 | Metric | Global | Environmental | Sensor |
 |--------|--------|---------------|--------|
 | F1-Score | **~0.84** | ~0.79 | ~0.84 |
 | False alarm rate | 15–18% | — | — |
+
+> **Note:** Headline F1 (~0.84) reflects drift-presence detection and sensor-pathway performance (Scenario B ≈ 0.82 F1). FAR (15–18%) is measured on validation-baseline windows without injected drift. See `ml/test_model.py` → HEADLINE METRICS block after `docker compose --profile train run --rm train python ml/test_model.py`.
 
 ### Monitored features (5-channel LSTM)
 

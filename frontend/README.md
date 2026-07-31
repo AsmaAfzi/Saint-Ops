@@ -9,7 +9,7 @@ React operations dashboard for live drift monitoring and MLOps controls. Built w
 The frontend is a **static SPA** served by Nginx in Docker. It does not run ML inference — it visualizes data from the FastAPI backend.
 
 ```
-Browser  →  Nginx (:3000)  →  /api/* proxied to backend:8000
+Browser  →  Nginx (:3200)  →  /api/* proxied to backend:8000
           →  /* static React bundle
 ```
 
